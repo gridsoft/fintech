@@ -175,6 +175,18 @@ $itemOptions = function ($selectedValue = null) use ($products, $services) {
         }
     });
 
+    // Кога се избира производ/услуга, полето за цена се пополнува со
+    // стандардната цена — видлива и уредлива, корисникот слободно ја менува.
+    tbody.addEventListener('change', function (e) {
+        if (e.target.classList.contains('line-item')) {
+            var select = e.target;
+            var opt = select.options[select.selectedIndex];
+            var priceInput = select.closest('tr').querySelector('.line-price');
+            var price = opt ? opt.getAttribute('data-price') : null;
+            priceInput.value = price !== null ? parseFloat(price).toFixed(2) : '';
+        }
+    });
+
     tbody.addEventListener('input', recalc);
     tbody.addEventListener('change', recalc);
 
