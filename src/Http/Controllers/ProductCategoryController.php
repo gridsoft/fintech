@@ -44,7 +44,7 @@ class ProductCategoryController
             'activeNav' => 'product-categories',
             'breadcrumb' => ['Почетна' => '/', 'Категории на производи' => '/product-categories', 'Нова категорија'],
             'category' => null,
-            'accounts' => $this->accounts->postableByType('revenue'),
+            'accounts' => $this->accounts->postable(),
             'vatRates' => $this->vatRates->allActive(),
             'errors' => [],
         ]);
@@ -90,7 +90,7 @@ class ProductCategoryController
             'activeNav' => 'product-categories',
             'breadcrumb' => ['Почетна' => '/', 'Категории на производи' => '/product-categories', 'Уреди категорија'],
             'category' => $category,
-            'accounts' => $this->accounts->postableByType('revenue'),
+            'accounts' => $this->accounts->postable(),
             'vatRates' => $this->vatRates->allActive(),
             'errors' => [],
         ]);
@@ -147,7 +147,7 @@ class ProductCategoryController
             'activeNav' => 'product-categories',
             'breadcrumb' => ['Почетна' => '/', 'Категории на производи' => '/product-categories', $category ? 'Уреди категорија' : 'Нова категорија'],
             'category' => $category,
-            'accounts' => $this->accounts->postableByType('revenue'),
+            'accounts' => $this->accounts->postable(),
             'vatRates' => $this->vatRates->allActive(),
             'errors' => $errors,
         ]);
@@ -161,32 +161,15 @@ class ProductCategoryController
             $errors['name'] = 'Називот е задолжителен.';
         }
 
-        $domesticAccountId = $request->input('domestic_account_id');
-
-        if (!$domesticAccountId) {
+        if (!$request->input('domestic_account_id')) {
             $errors['domestic_account_id'] = 'Изберете сметка за домашен промет.';
-        } elseif (!$this->isRevenueAccount((int) $domesticAccountId)) {
-            $errors['domestic_account_id'] = 'Мора да биде приходна сметка.';
         }
 
         if (!$request->input('domestic_vat_rate_id')) {
             $errors['domestic_vat_rate_id'] = 'Изберете ДДВ стапка за домашен промет.';
         }
 
-        $foreignAccountId = $request->input('foreign_account_id');
-
-        if ($foreignAccountId !== '' && $foreignAccountId !== null && !$this->isRevenueAccount((int) $foreignAccountId)) {
-            $errors['foreign_account_id'] = 'Мора да биде приходна сметка.';
-        }
-
         return $errors;
-    }
-
-    private function isRevenueAccount(int $accountId): bool
-    {
-        $account = $this->accounts->find($accountId);
-
-        return $account !== null && $account->type === 'revenue';
     }
 
     /** @return array<int, \App\Domain\Accounting\Account> */
