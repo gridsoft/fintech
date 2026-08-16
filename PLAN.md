@@ -55,16 +55,16 @@
 
 Ова е најважната фаза — сè друго подоцна само генерира записи тука.
 
-- [ ] Табели:
+- [x] Табели:
   - `journal_entries`: `id`, `date`, `description`, `reference`, `created_at`
   - `journal_lines`: `id`, `journal_entry_id`, `account_id`, `debit`, `credit`, `description`
-- [ ] `LedgerService::postEntry()`:
+- [x] `LedgerService::postEntry()`:
   - Прима листа на линии (account + debit/credit)
   - Проверува: сума(debit) === сума(credit), инаку фрла исклучок
   - Сè во една DB транзакција (`beginTransaction` / `commit` / `rollBack`)
   - Ниту еден друг дел од системот не пишува директно во `journal_lines` — сè оди преку овој сервис
-- [ ] Едноставен UI за рачно внесување journal entry (за тестирање на core-от пред да гради фактурирање)
-- [ ] Приказ на "картица на сметка" (сите записи за една сметка + running balance)
+- [x] Едноставен UI за рачно внесување journal entry (за тестирање на core-от пред да гради фактурирање)
+- [x] Приказ на "картица на сметка" (сите записи за една сметка + running balance)
 
 **Излез од фазата:** Можеш рачно да внесеш трансакции и да видиш дека дебит/кредит секогаш се балансираат.
 

@@ -38,6 +38,9 @@
                             <?php endif; ?>
                         </td>
                         <td class="text-end">
+                            <a href="/accounts/<?= $account->id ?>/ledger" class="btn btn-sm btn-outline-secondary" title="Картица на сметка">
+                                <i class="bi bi-journal-text"></i>
+                            </a>
                             <a href="/accounts/<?= $account->id ?>/edit" class="btn btn-sm btn-outline-secondary">
                                 <i class="bi bi-pencil"></i>
                             </a>

@@ -6,14 +6,17 @@ use App\Core\Request;
 use App\Core\Response;
 use App\Domain\Accounting\Account;
 use App\Repository\AccountRepository;
+use App\Repository\JournalRepository;
 
 class AccountController
 {
     private AccountRepository $accounts;
+    private JournalRepository $journal;
 
     public function __construct()
     {
         $this->accounts = new AccountRepository();
+        $this->journal = new JournalRepository();
     }
 
     public function index(Request $request): void
@@ -134,6 +137,41 @@ class AccountController
     {
         $this->accounts->delete((int) $id);
         Response::redirect('/accounts');
+    }
+
+    public function ledger(Request $request, string $id): void
+    {
+        $account = $this->accounts->find((int) $id);
+
+        if (!$account) {
+            Response::html('<h1>404</h1><p>Сметката не е пронајдена.</p>', 404);
+            return;
+        }
+
+        $debitNormal = in_array($account->type, ['asset', 'expense'], true);
+        $rows = [];
+        $balance = 0.0;
+
+        foreach ($this->journal->linesForAccount($account->id) as $item) {
+            $debit = (float) $item['line']->debit;
+            $credit = (float) $item['line']->credit;
+            $balance += $debitNormal ? ($debit - $credit) : ($credit - $debit);
+
+            $rows[] = [
+                'entry' => $item['entry'],
+                'line' => $item['line'],
+                'balance' => $balance,
+            ];
+        }
+
+        Response::view('accounts/ledger', [
+            'pageTitle' => 'Картица на сметка',
+            'activeNav' => 'accounts',
+            'breadcrumb' => ['Почетна' => '/', 'Контен план' => '/accounts', $account->code . ' — ' . $account->name],
+            'account' => $account,
+            'rows' => $rows,
+            'closingBalance' => $balance,
+        ]);
     }
 
     private function validate(Request $request, ?int $excludeId = null): array

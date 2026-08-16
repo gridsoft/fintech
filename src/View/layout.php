@@ -36,9 +36,11 @@
             <a href="/accounts" class="sidebar-link <?= ($activeNav ?? '') === 'accounts' ? 'active' : '' ?>">
                 <i class="bi bi-diagram-3-fill"></i> <span>Контен план</span>
             </a>
+            <a href="/journal" class="sidebar-link <?= ($activeNav ?? '') === 'journal' ? 'active' : '' ?>">
+                <i class="bi bi-journal-text"></i> <span>Дневник</span>
+            </a>
 
             <div class="sidebar-heading">Наскоро</div>
-            <span class="sidebar-link disabled"><i class="bi bi-journal-text"></i> <span>Дневник</span></span>
             <span class="sidebar-link disabled"><i class="bi bi-people-fill"></i> <span>Партнери</span></span>
             <span class="sidebar-link disabled"><i class="bi bi-receipt"></i> <span>Фактури</span></span>
             <span class="sidebar-link disabled"><i class="bi bi-bar-chart-fill"></i> <span>Извештаи</span></span>
