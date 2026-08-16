@@ -48,6 +48,14 @@
             <a href="/reports" class="sidebar-link <?= ($activeNav ?? '') === 'reports' ? 'active' : '' ?>">
                 <i class="bi bi-bar-chart-fill"></i> <span>Извештаи</span>
             </a>
+
+            <div class="sidebar-heading">Поставки</div>
+            <a href="/nalozi" class="sidebar-link <?= ($activeNav ?? '') === 'nalozi' ? 'active' : '' ?>">
+                <i class="bi bi-file-earmark-text"></i> <span>Налози</span>
+            </a>
+            <a href="/terkovi" class="sidebar-link <?= ($activeNav ?? '') === 'terkovi' ? 'active' : '' ?>">
+                <i class="bi bi-diagram-2-fill"></i> <span>Теркови</span>
+            </a>
         </nav>
     </aside>
 

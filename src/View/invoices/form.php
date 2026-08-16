@@ -6,7 +6,7 @@
     <div class="card-body">
         <form method="post" action="/invoices">
             <div class="row g-3 mb-3">
-                <div class="col-md-5">
+                <div class="col-md-4">
                     <label for="partner_id" class="form-label">Партнер</label>
                     <select id="partner_id" name="partner_id" class="form-select <?= isset($errors['partner_id']) ? 'is-invalid' : '' ?>">
                         <option value="">— избери партнер —</option>
@@ -18,13 +18,29 @@
                     </select>
                     <?php if (isset($errors['partner_id'])): ?><div class="invalid-feedback"><?= htmlspecialchars($errors['partner_id']) ?></div><?php endif; ?>
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-4">
+                    <label for="nalog_id" class="form-label">Налог</label>
+                    <select id="nalog_id" name="nalog_id" class="form-select <?= isset($errors['nalog_id']) ? 'is-invalid' : '' ?>">
+                        <option value="">— избери налог —</option>
+                        <?php foreach ($nalozi as $nalog): ?>
+                            <option value="<?= $nalog->id ?>" <?= (string) $old['nalog_id'] === (string) $nalog->id ? 'selected' : '' ?>>
+                                <?= htmlspecialchars($nalog->name) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                    <?php if (isset($errors['nalog_id'])): ?>
+                        <div class="invalid-feedback"><?= htmlspecialchars($errors['nalog_id']) ?></div>
+                    <?php else: ?>
+                        <div class="form-text">Определува кои сметки ќе се користат при книжење. <a href="/nalozi" target="_blank">Уреди налози →</a></div>
+                    <?php endif; ?>
+                </div>
+                <div class="col-md-2">
                     <label for="date" class="form-label">Датум</label>
                     <input type="date" id="date" name="date" class="form-control <?= isset($errors['date']) ? 'is-invalid' : '' ?>"
                            value="<?= htmlspecialchars($old['date']) ?>" required>
                     <?php if (isset($errors['date'])): ?><div class="invalid-feedback"><?= htmlspecialchars($errors['date']) ?></div><?php endif; ?>
                 </div>
-                <div class="col-md-4">
+                <div class="col-md-2">
                     <label for="due_date" class="form-label">Рок на плаќање</label>
                     <input type="date" id="due_date" name="due_date" class="form-control <?= isset($errors['due_date']) ? 'is-invalid' : '' ?>"
                            value="<?= htmlspecialchars($old['due_date']) ?>" required>

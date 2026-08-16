@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Core\Request;
 use App\Core\Response;
 use App\Repository\InvoiceRepository;
+use App\Repository\NalogRepository;
 use App\Repository\PartnerRepository;
 use App\Service\InvoiceService;
 use InvalidArgumentException;
@@ -14,12 +15,14 @@ class InvoiceController
 {
     private InvoiceRepository $invoices;
     private PartnerRepository $partners;
+    private NalogRepository $nalozi;
     private InvoiceService $service;
 
     public function __construct()
     {
         $this->invoices = new InvoiceRepository();
         $this->partners = new PartnerRepository();
+        $this->nalozi = new NalogRepository();
         $this->service = new InvoiceService($this->invoices);
     }
 
@@ -39,14 +42,18 @@ class InvoiceController
 
     public function create(Request $request): void
     {
+        $nalozi = $this->nalozi->allActive();
+
         Response::view('invoices/form', [
             'pageTitle' => 'Нова фактура',
             'activeNav' => 'invoices',
             'breadcrumb' => ['Почетна' => '/', 'Фактури' => '/invoices', 'Нова фактура'],
             'partners' => $this->partners->all(),
+            'nalozi' => $nalozi,
             'errors' => [],
             'old' => [
                 'partner_id' => '',
+                'nalog_id' => count($nalozi) === 1 ? (string) $nalozi[0]->id : '',
                 'date' => date('Y-m-d'),
                 'due_date' => date('Y-m-d', strtotime('+30 days')),
                 'lines' => [
@@ -59,6 +66,7 @@ class InvoiceController
     public function store(Request $request): void
     {
         $partnerId = $request->input('partner_id');
+        $nalogId = $request->input('nalog_id');
         $date = $request->input('date');
         $dueDate = $request->input('due_date');
         $lines = $this->collectLines($request);
@@ -67,6 +75,10 @@ class InvoiceController
 
         if (!$partnerId) {
             $errors['partner_id'] = 'Изберете партнер.';
+        }
+
+        if (!$nalogId) {
+            $errors['nalog_id'] = 'Изберете налог.';
         }
 
         if (!$date) {
@@ -79,7 +91,7 @@ class InvoiceController
 
         if (!$errors) {
             try {
-                $invoiceId = $this->service->createInvoice((int) $partnerId, $date, $dueDate, $lines);
+                $invoiceId = $this->service->createInvoice((int) $partnerId, (int) $nalogId, $date, $dueDate, $lines);
                 Response::redirect("/invoices/$invoiceId");
                 return;
             } catch (InvalidArgumentException $e) {
@@ -92,9 +104,11 @@ class InvoiceController
             'activeNav' => 'invoices',
             'breadcrumb' => ['Почетна' => '/', 'Фактури' => '/invoices', 'Нова фактура'],
             'partners' => $this->partners->all(),
+            'nalozi' => $this->nalozi->allActive(),
             'errors' => $errors,
             'old' => [
                 'partner_id' => $partnerId,
+                'nalog_id' => $nalogId,
                 'date' => $date,
                 'due_date' => $dueDate,
                 'lines' => $lines ?: [
@@ -114,6 +128,7 @@ class InvoiceController
         }
 
         $partner = $this->partners->find($invoice->partnerId);
+        $nalog = $invoice->nalogId ? $this->nalozi->find($invoice->nalogId) : null;
 
         Response::view('invoices/show', [
             'pageTitle' => "Фактура {$invoice->number}",
@@ -121,6 +136,7 @@ class InvoiceController
             'breadcrumb' => ['Почетна' => '/', 'Фактури' => '/invoices', $invoice->number],
             'invoice' => $invoice,
             'partner' => $partner,
+            'nalog' => $nalog,
         ]);
     }
 

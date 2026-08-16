@@ -5,8 +5,9 @@ namespace App\Service;
 use App\Core\Database;
 use App\Domain\Invoicing\Invoice;
 use App\Domain\Invoicing\InvoiceLine;
-use App\Repository\AccountRepository;
 use App\Repository\InvoiceRepository;
+use App\Repository\NalogRepository;
+use App\Repository\TerkRepository;
 use InvalidArgumentException;
 use PDO;
 use RuntimeException;
@@ -14,23 +15,22 @@ use Throwable;
 
 class InvoiceService
 {
-    private const ACCOUNT_RECEIVABLES = '2200';
-    private const ACCOUNT_REVENUE = '6100';
-    private const ACCOUNT_VAT_PAYABLE = '4300';
-
     private PDO $db;
     private InvoiceRepository $invoices;
-    private AccountRepository $accounts;
+    private NalogRepository $nalozi;
+    private TerkRepository $terkovi;
     private LedgerService $ledger;
 
     public function __construct(
         ?InvoiceRepository $invoices = null,
-        ?AccountRepository $accounts = null,
+        ?NalogRepository $nalozi = null,
+        ?TerkRepository $terkovi = null,
         ?LedgerService $ledger = null
     ) {
         $this->db = Database::connection();
         $this->invoices = $invoices ?? new InvoiceRepository();
-        $this->accounts = $accounts ?? new AccountRepository();
+        $this->nalozi = $nalozi ?? new NalogRepository();
+        $this->terkovi = $terkovi ?? new TerkRepository();
         $this->ledger = $ledger ?? new LedgerService();
     }
 
@@ -39,7 +39,7 @@ class InvoiceService
      *
      * @param array<int, array{description: string, quantity: string|float, unit_price: string|float, vat_rate: string|float}> $lines
      */
-    public function createInvoice(int $partnerId, string $date, string $dueDate, array $lines): int
+    public function createInvoice(int $partnerId, ?int $nalogId, string $date, string $dueDate, array $lines): int
     {
         if (count($lines) < 1) {
             throw new InvalidArgumentException('Фактурата мора да содржи барем 1 ставка.');
@@ -92,6 +92,7 @@ class InvoiceService
         try {
             $invoice = new Invoice(
                 $partnerId,
+                $nalogId,
                 $this->invoices->nextNumber(),
                 $date,
                 $dueDate,
@@ -124,8 +125,8 @@ class InvoiceService
     }
 
     /**
-     * Ја издава фактурата и автоматски генерира journal entry:
-     * Побарувања (дебит) / Приходи + ДДВ обврска (кредит).
+     * Ја издава фактурата: книжењето се гради динамички според теркот на нејзиниот налог
+     * (секоја линија од теркот вели која сметка, дебит/кредит и од кој износ — нето/ддв/бруто).
      */
     public function issue(int $invoiceId): void
     {
@@ -139,34 +140,48 @@ class InvoiceService
             throw new RuntimeException('Само фактура во статус „нацрт“ може да се издаде.');
         }
 
-        $receivables = $this->accounts->findByCode(self::ACCOUNT_RECEIVABLES);
-        $revenue = $this->accounts->findByCode(self::ACCOUNT_REVENUE);
-        $vatPayable = $this->accounts->findByCode(self::ACCOUNT_VAT_PAYABLE);
-
-        if (!$receivables || !$revenue || !$vatPayable) {
-            throw new RuntimeException('Недостасуваат стандардни сметки (2200/6100/4300) во контниот план.');
+        if (!$invoice->nalogId) {
+            throw new RuntimeException('Фактурата нема доделено налог — не може да се знае како да се книжи.');
         }
 
-        $journalLines = [[
-            'account_id' => $receivables->id,
-            'partner_id' => $invoice->partnerId,
-            'debit' => $invoice->totalGross,
-            'credit' => '0',
-            'description' => "Фактура {$invoice->number}",
-        ], [
-            'account_id' => $revenue->id,
-            'debit' => '0',
-            'credit' => $invoice->totalNet,
-            'description' => "Фактура {$invoice->number}",
-        ]];
+        $nalog = $this->nalozi->find($invoice->nalogId);
 
-        if ((float) $invoice->totalVat > 0) {
+        if (!$nalog) {
+            throw new RuntimeException('Налогот на фактурата не постои.');
+        }
+
+        $terk = $this->terkovi->find($nalog->terkId);
+
+        if (!$terk || count($terk->lines) < 1) {
+            throw new RuntimeException("Теркот „{$nalog->name}“ нема дефинирани ставки за книжење.");
+        }
+
+        $amounts = [
+            'net' => $invoice->totalNet,
+            'vat' => $invoice->totalVat,
+            'gross' => $invoice->totalGross,
+        ];
+
+        $journalLines = [];
+
+        foreach ($terk->lines as $terkLine) {
+            $amount = $amounts[$terkLine->amountSource] ?? '0.00';
+
+            if ((float) $amount <= 0) {
+                continue;
+            }
+
             $journalLines[] = [
-                'account_id' => $vatPayable->id,
-                'debit' => '0',
-                'credit' => $invoice->totalVat,
-                'description' => "ДДВ по фактура {$invoice->number}",
+                'account_id' => $terkLine->accountId,
+                'partner_id' => $terkLine->tagPartner ? $invoice->partnerId : null,
+                'debit' => $terkLine->side === 'debit' ? $amount : '0',
+                'credit' => $terkLine->side === 'credit' ? $amount : '0',
+                'description' => "Фактура {$invoice->number}",
             ];
+        }
+
+        if (count($journalLines) < 2) {
+            throw new RuntimeException("Теркот „{$nalog->name}“ произведува помалку од 2 ставки за книжење — провери го теркот.");
         }
 
         $entryId = $this->ledger->postEntry(

@@ -43,6 +43,7 @@ $badgeClass = [
                 <h5 class="mb-1">Фактура <?= htmlspecialchars($invoice->number) ?></h5>
                 <div class="text-muted">Датум: <?= htmlspecialchars($invoice->date) ?></div>
                 <div class="text-muted">Рок на плаќање: <?= htmlspecialchars($invoice->dueDate) ?></div>
+                <div class="text-muted no-print">Налог: <?= $nalog ? htmlspecialchars($nalog->name) : '—' ?></div>
             </div>
             <div class="col-6 text-end">
                 <strong>Партнер</strong><br>

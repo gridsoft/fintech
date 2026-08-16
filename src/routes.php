@@ -7,6 +7,8 @@ use App\Http\Controllers\JournalController;
 use App\Http\Controllers\PartnerController;
 use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\ReportController;
+use App\Http\Controllers\TerkController;
+use App\Http\Controllers\NalogController;
 
 $router = new Router();
 
@@ -45,5 +47,19 @@ $router->get('/reports', [ReportController::class, 'index']);
 $router->get('/reports/trial-balance', [ReportController::class, 'trialBalance']);
 $router->get('/reports/vat', [ReportController::class, 'vat']);
 $router->get('/reports/open-items', [ReportController::class, 'openItems']);
+
+$router->get('/terkovi', [TerkController::class, 'index']);
+$router->get('/terkovi/create', [TerkController::class, 'create']);
+$router->post('/terkovi', [TerkController::class, 'store']);
+$router->get('/terkovi/{id}/edit', [TerkController::class, 'edit']);
+$router->post('/terkovi/{id}', [TerkController::class, 'update']);
+$router->post('/terkovi/{id}/delete', [TerkController::class, 'destroy']);
+
+$router->get('/nalozi', [NalogController::class, 'index']);
+$router->get('/nalozi/create', [NalogController::class, 'create']);
+$router->post('/nalozi', [NalogController::class, 'store']);
+$router->get('/nalozi/{id}/edit', [NalogController::class, 'edit']);
+$router->post('/nalozi/{id}', [NalogController::class, 'update']);
+$router->post('/nalozi/{id}/delete', [NalogController::class, 'destroy']);
 
 return $router;
