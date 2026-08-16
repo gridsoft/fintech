@@ -46,8 +46,8 @@
                             </td>
                             <td>
                                 <select name="line_side[]" class="form-select">
-                                    <option value="debit" <?= $line['side'] === 'debit' ? 'selected' : '' ?>>Дебит</option>
-                                    <option value="credit" <?= $line['side'] === 'credit' ? 'selected' : '' ?>>Кредит</option>
+                                    <option value="debit" <?= $line['side'] === 'debit' ? 'selected' : '' ?>>Должи</option>
+                                    <option value="credit" <?= $line['side'] === 'credit' ? 'selected' : '' ?>>Побарува</option>
                                 </select>
                             </td>
                             <td>
@@ -96,8 +96,8 @@
         </td>
         <td>
             <select name="line_side[]" class="form-select">
-                <option value="debit">Дебит</option>
-                <option value="credit">Кредит</option>
+                <option value="debit">Должи</option>
+                <option value="credit">Побарува</option>
             </select>
         </td>
         <td>
