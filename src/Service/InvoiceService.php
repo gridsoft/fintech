@@ -25,8 +25,8 @@ use Throwable;
  */
 class InvoiceService
 {
-    private const ACCOUNT_RECEIVABLES_DOMESTIC = '120';
-    private const ACCOUNT_RECEIVABLES_FOREIGN = '121';
+    private const ACCOUNT_RECEIVABLES_DOMESTIC = '1200';
+    private const ACCOUNT_RECEIVABLES_FOREIGN = '1201';
 
     private PDO $db;
     private InvoiceRepository $invoices;
