@@ -37,6 +37,15 @@ class AccountRepository
         return (int) $this->db->query('SELECT COUNT(*) FROM accounts')->fetchColumn();
     }
 
+    public function findByCode(string $code): ?Account
+    {
+        $stmt = $this->db->prepare('SELECT * FROM accounts WHERE code = ?');
+        $stmt->execute([$code]);
+        $row = $stmt->fetch();
+
+        return $row ? Account::fromRow($row) : null;
+    }
+
     /** @return array<int, string> id => "code — name", за parent избирач */
     public function options(?int $excludeId = null): array
     {

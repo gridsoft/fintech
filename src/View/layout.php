@@ -42,9 +42,11 @@
             <a href="/partners" class="sidebar-link <?= ($activeNav ?? '') === 'partners' ? 'active' : '' ?>">
                 <i class="bi bi-people-fill"></i> <span>Партнери</span>
             </a>
+            <a href="/invoices" class="sidebar-link <?= ($activeNav ?? '') === 'invoices' ? 'active' : '' ?>">
+                <i class="bi bi-receipt"></i> <span>Фактури</span>
+            </a>
 
             <div class="sidebar-heading">Наскоро</div>
-            <span class="sidebar-link disabled"><i class="bi bi-receipt"></i> <span>Фактури</span></span>
             <span class="sidebar-link disabled"><i class="bi bi-bar-chart-fill"></i> <span>Извештаи</span></span>
         </nav>
     </aside>

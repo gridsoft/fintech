@@ -80,14 +80,14 @@
 
 ## Фаза 4 — Фактурирање
 
-- [ ] Табели:
+- [x] Табели:
   - `invoices`: `id`, `partner_id`, `number`, `date`, `due_date`, `status`, `total_net`, `total_vat`, `total_gross`
   - `invoice_lines`: `id`, `invoice_id`, `description`, `quantity`, `unit_price`, `vat_rate`, `line_total`
-- [ ] `InvoiceService::createInvoice()`:
-  - Создава фактура + линии
-  - Автоматски генерира journal entry преку `LedgerService` (Побарувања/Приходи/ДДВ)
-- [ ] UI: листа фактури, форма за нова фактура (со повеќе линии), печатење/PDF преглед (проста HTML→print верзија за почеток, PDF подоцна)
-- [ ] Статуси: draft / issued / paid / cancelled
+- [x] `InvoiceService::createInvoice()` + `issue()`:
+  - Создава фактура + линии (статус `draft`, нема книжење уште)
+  - `issue()` автоматски генерира journal entry преку `LedgerService` (Побарувања/Приходи/ДДВ), само тогаш фактурата влегува во главната книга
+- [x] UI: листа фактури, форма за нова фактура (со повеќе линии), печатење/PDF преглед (проста HTML→print верзија за почеток, PDF подоцна)
+- [x] Статуси: draft / issued / paid / cancelled
 
 **Излез од фазата:** Издадена фактура автоматски се одразува во главната книга.
 

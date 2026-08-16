@@ -155,3 +155,20 @@ html, body {
         margin-left: 0;
     }
 }
+
+/* Печатење фактура */
+@media print {
+    .topbar, .sidebar, .content-header, .no-print {
+        display: none !important;
+    }
+
+    .content {
+        margin-left: 0;
+        padding: 0;
+    }
+
+    .printable-invoice {
+        box-shadow: none;
+        border: none;
+    }
+}
