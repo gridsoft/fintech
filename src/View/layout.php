@@ -45,9 +45,9 @@
             <a href="/invoices" class="sidebar-link <?= ($activeNav ?? '') === 'invoices' ? 'active' : '' ?>">
                 <i class="bi bi-receipt"></i> <span>Фактури</span>
             </a>
-
-            <div class="sidebar-heading">Наскоро</div>
-            <span class="sidebar-link disabled"><i class="bi bi-bar-chart-fill"></i> <span>Извештаи</span></span>
+            <a href="/reports" class="sidebar-link <?= ($activeNav ?? '') === 'reports' ? 'active' : '' ?>">
+                <i class="bi bi-bar-chart-fill"></i> <span>Извештаи</span>
+            </a>
         </nav>
     </aside>
 

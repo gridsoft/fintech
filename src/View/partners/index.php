@@ -37,6 +37,9 @@
                             <?php endif; ?>
                         </td>
                         <td class="text-end">
+                            <a href="/partners/<?= $partner->id ?>/statement" class="btn btn-sm btn-outline-secondary" title="Картица на партнер">
+                                <i class="bi bi-journal-text"></i>
+                            </a>
                             <a href="/partners/<?= $partner->id ?>/edit" class="btn btn-sm btn-outline-secondary">
                                 <i class="bi bi-pencil"></i>
                             </a>

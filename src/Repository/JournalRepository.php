@@ -113,4 +113,77 @@ class JournalRepository
 
         return $results;
     }
+
+    /**
+     * Сите линии за еден партнер, со податоци од записот и сметката, хронолошки подредени.
+     * @return array<int, array{line: JournalLine, entry: JournalEntry, account_code: string, account_name: string}>
+     */
+    public function linesForPartner(int $partnerId): array
+    {
+        $stmt = $this->db->prepare(
+            'SELECT l.*, e.entry_date, e.description AS entry_description, e.reference,
+                    a.code AS account_code, a.name AS account_name
+             FROM journal_lines l
+             JOIN journal_entries e ON e.id = l.journal_entry_id
+             JOIN accounts a ON a.id = l.account_id
+             WHERE l.partner_id = ?
+             ORDER BY e.entry_date ASC, e.id ASC, l.id ASC'
+        );
+        $stmt->execute([$partnerId]);
+
+        $results = [];
+        foreach ($stmt->fetchAll() as $row) {
+            $line = JournalLine::fromRow($row);
+            $entry = new JournalEntry($row['entry_date'], $row['entry_description'], $row['reference'], (int) $row['journal_entry_id']);
+            $results[] = [
+                'line' => $line,
+                'entry' => $entry,
+                'account_code' => $row['account_code'],
+                'account_name' => $row['account_name'],
+            ];
+        }
+
+        return $results;
+    }
+
+    /** @return array<int, array{account_id: int, debit: string, credit: string}> само сметки со активност */
+    public function balancesByAccount(): array
+    {
+        $stmt = $this->db->query(
+            'SELECT account_id, SUM(debit) AS debit, SUM(credit) AS credit
+             FROM journal_lines
+             GROUP BY account_id
+             HAVING SUM(debit) <> 0 OR SUM(credit) <> 0'
+        );
+
+        return $stmt->fetchAll();
+    }
+
+    /** @return array{debit: string, credit: string} */
+    public function sumForAccountCodeInPeriod(string $code, string $from, string $to): array
+    {
+        $stmt = $this->db->prepare(
+            'SELECT COALESCE(SUM(l.debit), 0) AS debit, COALESCE(SUM(l.credit), 0) AS credit
+             FROM journal_lines l
+             JOIN journal_entries e ON e.id = l.journal_entry_id
+             JOIN accounts a ON a.id = l.account_id
+             WHERE a.code = ? AND e.entry_date BETWEEN ? AND ?'
+        );
+        $stmt->execute([$code, $from, $to]);
+
+        return $stmt->fetch();
+    }
+
+    /** @return array<int, array{partner_id: int, debit: string, credit: string}> */
+    public function balancesByPartner(): array
+    {
+        $stmt = $this->db->query(
+            'SELECT partner_id, SUM(debit) AS debit, SUM(credit) AS credit
+             FROM journal_lines
+             WHERE partner_id IS NOT NULL
+             GROUP BY partner_id'
+        );
+
+        return $stmt->fetchAll();
+    }
 }

@@ -6,6 +6,7 @@ use App\Http\Controllers\AccountController;
 use App\Http\Controllers\JournalController;
 use App\Http\Controllers\PartnerController;
 use App\Http\Controllers\InvoiceController;
+use App\Http\Controllers\ReportController;
 
 $router = new Router();
 
@@ -30,6 +31,7 @@ $router->post('/partners', [PartnerController::class, 'store']);
 $router->get('/partners/{id}/edit', [PartnerController::class, 'edit']);
 $router->post('/partners/{id}', [PartnerController::class, 'update']);
 $router->post('/partners/{id}/delete', [PartnerController::class, 'destroy']);
+$router->get('/partners/{id}/statement', [PartnerController::class, 'statement']);
 
 $router->get('/invoices', [InvoiceController::class, 'index']);
 $router->get('/invoices/create', [InvoiceController::class, 'create']);
@@ -38,5 +40,10 @@ $router->get('/invoices/{id}', [InvoiceController::class, 'show']);
 $router->post('/invoices/{id}/issue', [InvoiceController::class, 'issue']);
 $router->post('/invoices/{id}/mark-paid', [InvoiceController::class, 'markPaid']);
 $router->post('/invoices/{id}/cancel', [InvoiceController::class, 'cancel']);
+
+$router->get('/reports', [ReportController::class, 'index']);
+$router->get('/reports/trial-balance', [ReportController::class, 'trialBalance']);
+$router->get('/reports/vat', [ReportController::class, 'vat']);
+$router->get('/reports/open-items', [ReportController::class, 'openItems']);
 
 return $router;

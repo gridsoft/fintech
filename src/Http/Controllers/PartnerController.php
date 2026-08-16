@@ -5,15 +5,18 @@ namespace App\Http\Controllers;
 use App\Core\Request;
 use App\Core\Response;
 use App\Domain\Partners\Partner;
+use App\Repository\JournalRepository;
 use App\Repository\PartnerRepository;
 
 class PartnerController
 {
     private PartnerRepository $partners;
+    private JournalRepository $journal;
 
     public function __construct()
     {
         $this->partners = new PartnerRepository();
+        $this->journal = new JournalRepository();
     }
 
     public function index(Request $request): void
@@ -122,6 +125,42 @@ class PartnerController
     {
         $this->partners->delete((int) $id);
         Response::redirect('/partners');
+    }
+
+    public function statement(Request $request, string $id): void
+    {
+        $partner = $this->partners->find((int) $id);
+
+        if (!$partner) {
+            Response::html('<h1>404</h1><p>Партнерот не е пронајден.</p>', 404);
+            return;
+        }
+
+        $rows = [];
+        $balance = 0.0;
+
+        foreach ($this->journal->linesForPartner($partner->id) as $item) {
+            $debit = (float) $item['line']->debit;
+            $credit = (float) $item['line']->credit;
+            $balance += $debit - $credit;
+
+            $rows[] = [
+                'entry' => $item['entry'],
+                'line' => $item['line'],
+                'account_code' => $item['account_code'],
+                'account_name' => $item['account_name'],
+                'balance' => $balance,
+            ];
+        }
+
+        Response::view('partners/statement', [
+            'pageTitle' => 'Картица на партнер',
+            'activeNav' => 'partners',
+            'breadcrumb' => ['Почетна' => '/', 'Партнери' => '/partners', $partner->name],
+            'partner' => $partner,
+            'rows' => $rows,
+            'closingBalance' => $balance,
+        ]);
     }
 
     private function validate(Request $request): array
