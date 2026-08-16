@@ -45,6 +45,15 @@ class AccountRepository
         return array_map([Account::class, 'fromRow'], $stmt->fetchAll());
     }
 
+    /** Постирачки сметки од само еден тип (на пр. 'revenue' за приходни сметки во категории). */
+    public function postableByType(string $type): array
+    {
+        $stmt = $this->db->prepare("SELECT * FROM accounts WHERE CHAR_LENGTH(code) >= 3 AND type = ? ORDER BY code ASC");
+        $stmt->execute([$type]);
+
+        return array_map([Account::class, 'fromRow'], $stmt->fetchAll());
+    }
+
     public function findByCode(string $code): ?Account
     {
         $stmt = $this->db->prepare('SELECT * FROM accounts WHERE code = ?');

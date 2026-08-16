@@ -1,4 +1,18 @@
-<?php $action = $category !== null ? "/service-categories/{$category->id}" : '/service-categories'; ?>
+<?php
+$action = $category !== null ? "/service-categories/{$category->id}" : '/service-categories';
+$validAccountIds = array_map(fn ($a) => $a->id, $accounts);
+$hasInvalidAccount = $category !== null && (
+    !in_array($category->domesticAccountId, $validAccountIds, true)
+    || ($category->foreignAccountId && !in_array($category->foreignAccountId, $validAccountIds, true))
+);
+?>
+
+<?php if ($hasInvalidAccount): ?>
+    <div class="alert alert-warning">
+        Оваа категорија моментално покажува на сметка што не е приходна (веројатно поставена пред да се воведе ова ограничување).
+        Падот подолу не ја прикажува старата вредност — избери приходна сметка и зачувај за да се поправи.
+    </div>
+<?php endif; ?>
 
 <div class="card">
     <div class="card-body">
@@ -33,7 +47,11 @@
                                     </option>
                                 <?php endforeach; ?>
                             </select>
-                            <?php if (isset($errors['domestic_account_id'])): ?><div class="invalid-feedback"><?= htmlspecialchars($errors['domestic_account_id']) ?></div><?php endif; ?>
+                            <?php if (isset($errors['domestic_account_id'])): ?>
+                                <div class="invalid-feedback"><?= htmlspecialchars($errors['domestic_account_id']) ?></div>
+                            <?php else: ?>
+                                <div class="form-text">Само приходни сметки (класа 7, група 75-79) — на неа секогаш се книжи кредит при издавање фактура.</div>
+                            <?php endif; ?>
                         </div>
                         <div class="col-md-4">
                             <label for="domestic_vat_rate_id" class="form-label">ДДВ стапка</label>
@@ -57,7 +75,7 @@
                     <div class="row g-3">
                         <div class="col-md-8">
                             <label for="foreign_account_id" class="form-label">Сметка</label>
-                            <select id="foreign_account_id" name="foreign_account_id" class="form-select">
+                            <select id="foreign_account_id" name="foreign_account_id" class="form-select <?= isset($errors['foreign_account_id']) ? 'is-invalid' : '' ?>">
                                 <option value="">— нема —</option>
                                 <?php foreach ($accounts as $account): ?>
                                     <option value="<?= $account->id ?>" <?= (int) ($category->foreignAccountId ?? 0) === $account->id ? 'selected' : '' ?>>
@@ -65,6 +83,7 @@
                                     </option>
                                 <?php endforeach; ?>
                             </select>
+                            <?php if (isset($errors['foreign_account_id'])): ?><div class="invalid-feedback"><?= htmlspecialchars($errors['foreign_account_id']) ?></div><?php endif; ?>
                         </div>
                         <div class="col-md-4">
                             <label for="foreign_vat_rate_id" class="form-label">ДДВ стапка</label>
