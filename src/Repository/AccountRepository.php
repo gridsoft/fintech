@@ -1,0 +1,116 @@
+<?php
+
+namespace App\Repository;
+
+use App\Core\Database;
+use App\Domain\Accounting\Account;
+use PDO;
+
+class AccountRepository
+{
+    private PDO $db;
+
+    public function __construct()
+    {
+        $this->db = Database::connection();
+    }
+
+    /** @return Account[] */
+    public function all(): array
+    {
+        $stmt = $this->db->query('SELECT * FROM accounts ORDER BY code ASC');
+
+        return array_map([Account::class, 'fromRow'], $stmt->fetchAll());
+    }
+
+    public function find(int $id): ?Account
+    {
+        $stmt = $this->db->prepare('SELECT * FROM accounts WHERE id = ?');
+        $stmt->execute([$id]);
+        $row = $stmt->fetch();
+
+        return $row ? Account::fromRow($row) : null;
+    }
+
+    public function count(): int
+    {
+        return (int) $this->db->query('SELECT COUNT(*) FROM accounts')->fetchColumn();
+    }
+
+    /** @return array<int, string> id => "code — name", за parent избирач */
+    public function options(?int $excludeId = null): array
+    {
+        $sql = 'SELECT id, code, name FROM accounts';
+        $params = [];
+
+        if ($excludeId !== null) {
+            $sql .= ' WHERE id != ?';
+            $params[] = $excludeId;
+        }
+
+        $sql .= ' ORDER BY code ASC';
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($params);
+
+        $options = [];
+        foreach ($stmt->fetchAll() as $row) {
+            $options[(int) $row['id']] = "{$row['code']} — {$row['name']}";
+        }
+
+        return $options;
+    }
+
+    public function create(Account $account): int
+    {
+        $stmt = $this->db->prepare(
+            'INSERT INTO accounts (code, name, type, parent_id, is_active) VALUES (?, ?, ?, ?, ?)'
+        );
+        $stmt->execute([
+            $account->code,
+            $account->name,
+            $account->type,
+            $account->parentId,
+            $account->isActive ? 1 : 0,
+        ]);
+
+        return (int) $this->db->lastInsertId();
+    }
+
+    public function update(Account $account): void
+    {
+        $stmt = $this->db->prepare(
+            'UPDATE accounts SET code = ?, name = ?, type = ?, parent_id = ?, is_active = ? WHERE id = ?'
+        );
+        $stmt->execute([
+            $account->code,
+            $account->name,
+            $account->type,
+            $account->parentId,
+            $account->isActive ? 1 : 0,
+            $account->id,
+        ]);
+    }
+
+    public function delete(int $id): void
+    {
+        $stmt = $this->db->prepare('DELETE FROM accounts WHERE id = ?');
+        $stmt->execute([$id]);
+    }
+
+    public function codeExists(string $code, ?int $excludeId = null): bool
+    {
+        $sql = 'SELECT COUNT(*) FROM accounts WHERE code = ?';
+        $params = [$code];
+
+        if ($excludeId !== null) {
+            $sql .= ' AND id != ?';
+            $params[] = $excludeId;
+        }
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($params);
+
+        return (int) $stmt->fetchColumn() > 0;
+    }
+}
