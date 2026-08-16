@@ -72,9 +72,9 @@
 
 ## Фаза 3 — Партнери (купувачи/добавувачи)
 
-- [ ] Табела `partners`: `id`, `name`, `type` (customer/supplier/both), `tax_number` (ЕДБ), `address`, `contact`
-- [ ] CRUD UI
-- [ ] Врска кон journal entries (за отворени ставки/salda подоцна)
+- [x] Табела `partners`: `id`, `name`, `type` (customer/supplier/both), `tax_number` (ЕДБ), `address`, `contact`
+- [x] CRUD UI
+- [x] Врска кон journal entries (за отворени ставки/salda подоцна)
 
 ---
 

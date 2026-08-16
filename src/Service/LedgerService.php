@@ -64,6 +64,7 @@ class LedgerService
 
             $normalized[] = [
                 'account_id' => (int) $line['account_id'],
+                'partner_id' => !empty($line['partner_id']) ? (int) $line['partner_id'] : null,
                 'debit' => $debit,
                 'credit' => $credit,
                 'description' => $line['description'] ?? null,
@@ -85,7 +86,8 @@ class LedgerService
                     $line['debit'],
                     $line['credit'],
                     $line['description'],
-                    $entryId
+                    $entryId,
+                    $line['partner_id']
                 ));
             }
 

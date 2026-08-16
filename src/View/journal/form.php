@@ -25,13 +25,15 @@
                 </div>
             </div>
 
+            <div class="table-responsive">
             <table class="table align-middle" id="lines-table">
                 <thead class="table-light">
                     <tr>
-                        <th style="width: 32%">Сметка</th>
-                        <th style="width: 22%">Опис на ставка</th>
-                        <th style="width: 15%">Дебит</th>
-                        <th style="width: 15%">Кредит</th>
+                        <th style="width: 26%">Сметка</th>
+                        <th style="width: 18%">Партнер</th>
+                        <th style="width: 18%">Опис на ставка</th>
+                        <th style="width: 13%">Дебит</th>
+                        <th style="width: 13%">Кредит</th>
                         <th></th>
                     </tr>
                 </thead>
@@ -48,6 +50,16 @@
                                     <?php endforeach; ?>
                                 </select>
                             </td>
+                            <td>
+                                <select name="line_partner_id[]" class="form-select">
+                                    <option value="">— нема —</option>
+                                    <?php foreach ($partners as $partner): ?>
+                                        <option value="<?= $partner->id ?>" <?= (string) ($line['partner_id'] ?? '') === (string) $partner->id ? 'selected' : '' ?>>
+                                            <?= htmlspecialchars($partner->name) ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </td>
                             <td><input type="text" name="line_description[]" class="form-control" value="<?= htmlspecialchars($line['description'] ?? '') ?>"></td>
                             <td><input type="number" step="0.01" min="0" name="line_debit[]" class="form-control line-debit" value="<?= htmlspecialchars($line['debit'] ?? '') ?>"></td>
                             <td><input type="number" step="0.01" min="0" name="line_credit[]" class="form-control line-credit" value="<?= htmlspecialchars($line['credit'] ?? '') ?>"></td>
@@ -57,17 +69,18 @@
                 </tbody>
                 <tfoot>
                     <tr>
-                        <td colspan="2" class="text-end fw-semibold">Вкупно:</td>
+                        <td colspan="3" class="text-end fw-semibold">Вкупно:</td>
                         <td class="fw-semibold" id="total-debit">0.00</td>
                         <td class="fw-semibold" id="total-credit">0.00</td>
                         <td></td>
                     </tr>
                     <tr>
-                        <td colspan="4" class="text-end" id="balance-note"></td>
+                        <td colspan="5" class="text-end" id="balance-note"></td>
                         <td></td>
                     </tr>
                 </tfoot>
             </table>
+            </div>
 
             <button type="button" class="btn btn-outline-secondary btn-sm mb-3" id="add-line">
                 <i class="bi bi-plus-lg"></i> Додади ставка
@@ -88,6 +101,14 @@
                 <option value="">— избери сметка —</option>
                 <?php foreach ($accounts as $account): ?>
                     <option value="<?= $account->id ?>"><?= htmlspecialchars($account->code . ' — ' . $account->name) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </td>
+        <td>
+            <select name="line_partner_id[]" class="form-select">
+                <option value="">— нема —</option>
+                <?php foreach ($partners as $partner): ?>
+                    <option value="<?= $partner->id ?>"><?= htmlspecialchars($partner->name) ?></option>
                 <?php endforeach; ?>
             </select>
         </td>

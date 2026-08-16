@@ -29,11 +29,12 @@ class JournalRepository
     public function insertLine(JournalLine $line): int
     {
         $stmt = $this->db->prepare(
-            'INSERT INTO journal_lines (journal_entry_id, account_id, debit, credit, description) VALUES (?, ?, ?, ?, ?)'
+            'INSERT INTO journal_lines (journal_entry_id, account_id, partner_id, debit, credit, description) VALUES (?, ?, ?, ?, ?, ?)'
         );
         $stmt->execute([
             $line->journalEntryId,
             $line->accountId,
+            $line->partnerId,
             $line->debit,
             $line->credit,
             $line->description,

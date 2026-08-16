@@ -6,6 +6,7 @@ use App\Core\Request;
 use App\Core\Response;
 use App\Repository\AccountRepository;
 use App\Repository\JournalRepository;
+use App\Repository\PartnerRepository;
 use App\Service\LedgerService;
 use InvalidArgumentException;
 use RuntimeException;
@@ -14,12 +15,14 @@ class JournalController
 {
     private JournalRepository $journal;
     private AccountRepository $accounts;
+    private PartnerRepository $partners;
     private LedgerService $ledger;
 
     public function __construct()
     {
         $this->journal = new JournalRepository();
         $this->accounts = new AccountRepository();
+        $this->partners = new PartnerRepository();
         $this->ledger = new LedgerService($this->journal);
     }
 
@@ -42,14 +45,13 @@ class JournalController
             return;
         }
 
-        $accountsById = $this->accountsById();
-
         Response::view('journal/show', [
             'pageTitle' => 'Преглед на запис',
             'activeNav' => 'journal',
             'breadcrumb' => ['Почетна' => '/', 'Дневник' => '/journal', 'Преглед'],
             'entry' => $entry,
-            'accountsById' => $accountsById,
+            'accountsById' => $this->accountsById(),
+            'partnersById' => $this->partnersById(),
         ]);
     }
 
@@ -60,14 +62,15 @@ class JournalController
             'activeNav' => 'journal',
             'breadcrumb' => ['Почетна' => '/', 'Дневник' => '/journal', 'Нов запис'],
             'accounts' => $this->accounts->all(),
+            'partners' => $this->partners->all(),
             'errors' => [],
             'old' => [
                 'date' => date('Y-m-d'),
                 'description' => '',
                 'reference' => '',
                 'lines' => [
-                    ['account_id' => '', 'debit' => '', 'credit' => '', 'description' => ''],
-                    ['account_id' => '', 'debit' => '', 'credit' => '', 'description' => ''],
+                    ['account_id' => '', 'partner_id' => '', 'debit' => '', 'credit' => '', 'description' => ''],
+                    ['account_id' => '', 'partner_id' => '', 'debit' => '', 'credit' => '', 'description' => ''],
                 ],
             ],
         ]);
@@ -105,14 +108,15 @@ class JournalController
             'activeNav' => 'journal',
             'breadcrumb' => ['Почетна' => '/', 'Дневник' => '/journal', 'Нов запис'],
             'accounts' => $this->accounts->all(),
+            'partners' => $this->partners->all(),
             'errors' => $errors,
             'old' => [
                 'date' => $date,
                 'description' => $description,
                 'reference' => $reference,
                 'lines' => $lines ?: [
-                    ['account_id' => '', 'debit' => '', 'credit' => '', 'description' => ''],
-                    ['account_id' => '', 'debit' => '', 'credit' => '', 'description' => ''],
+                    ['account_id' => '', 'partner_id' => '', 'debit' => '', 'credit' => '', 'description' => ''],
+                    ['account_id' => '', 'partner_id' => '', 'debit' => '', 'credit' => '', 'description' => ''],
                 ],
             ],
         ]);
@@ -121,6 +125,7 @@ class JournalController
     private function collectLines(Request $request): array
     {
         $accountIds = $request->input('line_account_id', []);
+        $partnerIds = $request->input('line_partner_id', []);
         $debits = $request->input('line_debit', []);
         $credits = $request->input('line_credit', []);
         $descriptions = $request->input('line_description', []);
@@ -133,6 +138,7 @@ class JournalController
 
             $lines[] = [
                 'account_id' => $accountId,
+                'partner_id' => $partnerIds[$i] ?? '',
                 'debit' => $debits[$i] ?? '',
                 'credit' => $credits[$i] ?? '',
                 'description' => $descriptions[$i] ?? '',
@@ -148,5 +154,13 @@ class JournalController
         $accounts = $this->accounts->all();
 
         return array_combine(array_map(fn ($a) => $a->id, $accounts), $accounts);
+    }
+
+    /** @return array<int, \App\Domain\Partners\Partner> */
+    private function partnersById(): array
+    {
+        $partners = $this->partners->all();
+
+        return array_combine(array_map(fn ($p) => $p->id, $partners), $partners);
     }
 }
