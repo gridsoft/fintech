@@ -7,6 +7,7 @@ use App\Core\Response;
 use App\Repository\InvoiceRepository;
 use App\Repository\NalogRepository;
 use App\Repository\PartnerRepository;
+use App\Repository\TerkRepository;
 use App\Service\InvoiceService;
 use InvalidArgumentException;
 use RuntimeException;
@@ -16,6 +17,7 @@ class InvoiceController
     private InvoiceRepository $invoices;
     private PartnerRepository $partners;
     private NalogRepository $nalozi;
+    private TerkRepository $terkovi;
     private InvoiceService $service;
 
     public function __construct()
@@ -23,6 +25,7 @@ class InvoiceController
         $this->invoices = new InvoiceRepository();
         $this->partners = new PartnerRepository();
         $this->nalozi = new NalogRepository();
+        $this->terkovi = new TerkRepository();
         $this->service = new InvoiceService($this->invoices);
     }
 
@@ -129,6 +132,7 @@ class InvoiceController
 
         $partner = $this->partners->find($invoice->partnerId);
         $nalog = $invoice->nalogId ? $this->nalozi->find($invoice->nalogId) : null;
+        $terk = $invoice->terkId ? $this->terkovi->find($invoice->terkId) : null;
 
         Response::view('invoices/show', [
             'pageTitle' => "Фактура {$invoice->number}",
@@ -137,13 +141,22 @@ class InvoiceController
             'invoice' => $invoice,
             'partner' => $partner,
             'nalog' => $nalog,
+            'terk' => $terk,
+            'terkovi' => $this->terkovi->all(),
         ]);
     }
 
     public function issue(Request $request, string $id): void
     {
+        $terkId = $request->input('terk_id');
+
+        if (!$terkId) {
+            Response::html('<h1>Грешка</h1><p>Изберете терк со кој ќе се книжи фактурата.</p><p><a href="/invoices/' . (int) $id . '">Назад</a></p>', 422);
+            return;
+        }
+
         try {
-            $this->service->issue((int) $id);
+            $this->service->issue((int) $id, (int) $terkId);
         } catch (InvalidArgumentException|RuntimeException $e) {
             Response::html('<h1>Грешка</h1><p>' . htmlspecialchars($e->getMessage()) . '</p><p><a href="/invoices/' . (int) $id . '">Назад</a></p>', 422);
             return;

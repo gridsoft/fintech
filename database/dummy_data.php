@@ -13,15 +13,27 @@ require __DIR__ . '/../vendor/autoload.php';
 use App\Core\Database;
 use App\Domain\Partners\Partner;
 use App\Repository\AccountRepository;
+use App\Repository\NalogRepository;
 use App\Repository\PartnerRepository;
+use App\Repository\TerkRepository;
 use App\Service\InvoiceService;
 use App\Service\LedgerService;
 
 $pdo = Database::connection();
 $partnerRepo = new PartnerRepository();
 $accountRepo = new AccountRepository();
+$nalogRepo = new NalogRepository();
+$terkRepo = new TerkRepository();
 $invoiceService = new InvoiceService();
 $ledgerService = new LedgerService();
+
+$defaultNalog = $nalogRepo->all()[0] ?? null;
+$defaultTerk = $terkRepo->all()[0] ?? null;
+
+if (!$defaultNalog || !$defaultTerk) {
+    fwrite(STDERR, "Нема дефиниран налог/терк — пушти прво php database/migrate.php.\n");
+    exit(1);
+}
 
 $markerName = 'Алфа Трговија ДООЕЛ';
 foreach ($partnerRepo->all() as $existing) {
@@ -75,10 +87,10 @@ $invoicesToCreate = [
 ];
 
 foreach ($invoicesToCreate as [$partnerKey, $date, $dueDate, $mode, $lines]) {
-    $invoiceId = $invoiceService->createInvoice($partnerIds[$partnerKey], $date, $dueDate, $lines);
+    $invoiceId = $invoiceService->createInvoice($partnerIds[$partnerKey], $defaultNalog->id, $date, $dueDate, $lines);
 
     if ($mode === 'issued' || $mode === 'issued_paid') {
-        $invoiceService->issue($invoiceId);
+        $invoiceService->issue($invoiceId, $defaultTerk->id);
     }
 
     if ($mode === 'issued_paid') {
@@ -90,11 +102,11 @@ foreach ($invoicesToCreate as [$partnerKey, $date, $dueDate, $mode, $lines]) {
 
 // --- Рачни journal записи (надвор од фактурирање) -------------------------
 
-$bank = $accountRepo->findByCode('2410');
-$capital = $accountRepo->findByCode('9100');
-$bankFees = $accountRepo->findByCode('7710');
-$rent = $accountRepo->findByCode('7430');
-$utilities = $accountRepo->findByCode('7440');
+$bank = $accountRepo->findByCode('100');
+$capital = $accountRepo->findByCode('912');
+$bankFees = $accountRepo->findByCode('447');
+$rent = $accountRepo->findByCode('414');
+$utilities = $accountRepo->findByCode('419');
 
 $ledgerService->postEntry('2026-07-01', 'Основачки влог во готово', 'ВЛОГ-001', [
     ['account_id' => $bank->id, 'debit' => '500000.00', 'credit' => '0'],

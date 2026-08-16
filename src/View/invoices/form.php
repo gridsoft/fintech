@@ -31,7 +31,7 @@
                     <?php if (isset($errors['nalog_id'])): ?>
                         <div class="invalid-feedback"><?= htmlspecialchars($errors['nalog_id']) ?></div>
                     <?php else: ?>
-                        <div class="form-text">Определува кои сметки ќе се користат при книжење. <a href="/nalozi" target="_blank">Уреди налози →</a></div>
+                        <div class="form-text">Тип документ за фактурата. <a href="/nalozi" target="_blank">Уреди налози →</a></div>
                     <?php endif; ?>
                 </div>
                 <div class="col-md-2">

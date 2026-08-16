@@ -42,16 +42,16 @@ class NalogRepository
 
     public function create(Nalog $nalog): int
     {
-        $stmt = $this->db->prepare('INSERT INTO nalozi (name, terk_id, is_active) VALUES (?, ?, ?)');
-        $stmt->execute([$nalog->name, $nalog->terkId, $nalog->isActive ? 1 : 0]);
+        $stmt = $this->db->prepare('INSERT INTO nalozi (name, is_active) VALUES (?, ?)');
+        $stmt->execute([$nalog->name, $nalog->isActive ? 1 : 0]);
 
         return (int) $this->db->lastInsertId();
     }
 
     public function update(Nalog $nalog): void
     {
-        $stmt = $this->db->prepare('UPDATE nalozi SET name = ?, terk_id = ?, is_active = ? WHERE id = ?');
-        $stmt->execute([$nalog->name, $nalog->terkId, $nalog->isActive ? 1 : 0, $nalog->id]);
+        $stmt = $this->db->prepare('UPDATE nalozi SET name = ?, is_active = ? WHERE id = ?');
+        $stmt->execute([$nalog->name, $nalog->isActive ? 1 : 0, $nalog->id]);
     }
 
     public function delete(int $id): void

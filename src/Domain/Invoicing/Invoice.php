@@ -16,6 +16,7 @@ class Invoice
     public ?int $id;
     public int $partnerId;
     public ?int $nalogId;
+    public ?int $terkId;
     public string $number;
     public string $date;
     public string $dueDate;
@@ -39,11 +40,13 @@ class Invoice
         string $totalVat = '0.00',
         string $totalGross = '0.00',
         ?int $journalEntryId = null,
+        ?int $terkId = null,
         ?int $id = null
     ) {
         $this->id = $id;
         $this->partnerId = $partnerId;
         $this->nalogId = $nalogId;
+        $this->terkId = $terkId;
         $this->number = $number;
         $this->date = $date;
         $this->dueDate = $dueDate;
@@ -67,6 +70,7 @@ class Invoice
             $row['total_vat'],
             $row['total_gross'],
             $row['journal_entry_id'] !== null ? (int) $row['journal_entry_id'] : null,
+            $row['terk_id'] !== null ? (int) $row['terk_id'] : null,
             (int) $row['id']
         );
     }

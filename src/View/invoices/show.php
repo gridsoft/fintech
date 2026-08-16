@@ -14,14 +14,20 @@ $badgeClass = [
             <a href="/journal/<?= $invoice->journalEntryId ?>" class="ms-2 small">Преглед на книжење →</a>
         <?php endif; ?>
     </div>
-    <div>
+    <div class="d-flex align-items-start gap-2">
         <button type="button" class="btn btn-outline-secondary btn-sm" onclick="window.print()">
             <i class="bi bi-printer"></i> Печати
         </button>
         <?php if ($invoice->status === 'draft'): ?>
-            <form action="/invoices/<?= $invoice->id ?>/issue" method="post" class="d-inline"
-                  onsubmit="return confirm('Да се издаде фактурата? Ова автоматски ќе создаде книжење во главната книга.');">
-                <button type="submit" class="btn btn-primary btn-sm">Издај фактура</button>
+            <form action="/invoices/<?= $invoice->id ?>/issue" method="post" class="d-inline-flex gap-1"
+                  onsubmit="return confirm('Да се издаде фактурата со избраниот терк? Ова автоматски ќе создаде книжење во главната книга.');">
+                <select name="terk_id" class="form-select form-select-sm" required>
+                    <option value="">— избери терк —</option>
+                    <?php foreach ($terkovi as $t): ?>
+                        <option value="<?= $t->id ?>"><?= htmlspecialchars($t->name) ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <button type="submit" class="btn btn-primary btn-sm text-nowrap">Издај фактура</button>
             </form>
             <form action="/invoices/<?= $invoice->id ?>/cancel" method="post" class="d-inline"
                   onsubmit="return confirm('Да се откаже нацртот?');">
@@ -36,6 +42,12 @@ $badgeClass = [
     </div>
 </div>
 
+<?php if (empty($terkovi) && $invoice->status === 'draft'): ?>
+    <div class="alert alert-warning no-print">
+        Нема дефинирани теркови. <a href="/terkovi/create">Создади терк</a> пред да можеш да ја издадеш фактурата.
+    </div>
+<?php endif; ?>
+
 <div class="card printable-invoice">
     <div class="card-body">
         <div class="row mb-4">
@@ -44,6 +56,9 @@ $badgeClass = [
                 <div class="text-muted">Датум: <?= htmlspecialchars($invoice->date) ?></div>
                 <div class="text-muted">Рок на плаќање: <?= htmlspecialchars($invoice->dueDate) ?></div>
                 <div class="text-muted no-print">Налог: <?= $nalog ? htmlspecialchars($nalog->name) : '—' ?></div>
+                <?php if ($terk): ?>
+                    <div class="text-muted no-print">Терк: <?= htmlspecialchars($terk->name) ?></div>
+                <?php endif; ?>
             </div>
             <div class="col-6 text-end">
                 <strong>Партнер</strong><br>

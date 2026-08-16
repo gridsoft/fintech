@@ -126,8 +126,8 @@ class TerkController
     {
         $terkId = (int) $id;
 
-        if ($this->terkovi->isUsedByNalog($terkId)) {
-            Response::html('<h1>Грешка</h1><p>Овој терк се користи од барем еден налог и не може да се избрише.</p><p><a href="/terkovi">Назад</a></p>', 422);
+        if ($this->terkovi->isUsedByInvoice($terkId)) {
+            Response::html('<h1>Грешка</h1><p>Овој терк веќе е користен за книжење фактура и не може да се избрише.</p><p><a href="/terkovi">Назад</a></p>', 422);
             return;
         }
 

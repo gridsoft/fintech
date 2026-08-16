@@ -6,7 +6,6 @@ use App\Core\Database;
 use App\Domain\Invoicing\Invoice;
 use App\Domain\Invoicing\InvoiceLine;
 use App\Repository\InvoiceRepository;
-use App\Repository\NalogRepository;
 use App\Repository\TerkRepository;
 use InvalidArgumentException;
 use PDO;
@@ -17,19 +16,16 @@ class InvoiceService
 {
     private PDO $db;
     private InvoiceRepository $invoices;
-    private NalogRepository $nalozi;
     private TerkRepository $terkovi;
     private LedgerService $ledger;
 
     public function __construct(
         ?InvoiceRepository $invoices = null,
-        ?NalogRepository $nalozi = null,
         ?TerkRepository $terkovi = null,
         ?LedgerService $ledger = null
     ) {
         $this->db = Database::connection();
         $this->invoices = $invoices ?? new InvoiceRepository();
-        $this->nalozi = $nalozi ?? new NalogRepository();
         $this->terkovi = $terkovi ?? new TerkRepository();
         $this->ledger = $ledger ?? new LedgerService();
     }
@@ -125,10 +121,11 @@ class InvoiceService
     }
 
     /**
-     * Ја издава фактурата: книжењето се гради динамички според теркот на нејзиниот налог
-     * (секоја линија од теркот вели која сметка, дебит/кредит и од кој износ — нето/ддв/бруто).
+     * Ја издава фактурата: книжењето се гради динамички според теркот што корисникот
+     * го избира токму сега (секоја линија од теркот вели која сметка, дебит/кредит
+     * и од кој износ — нето/ддв/бруто).
      */
-    public function issue(int $invoiceId): void
+    public function issue(int $invoiceId, int $terkId): void
     {
         $invoice = $this->invoices->find($invoiceId);
 
@@ -140,20 +137,10 @@ class InvoiceService
             throw new RuntimeException('Само фактура во статус „нацрт“ може да се издаде.');
         }
 
-        if (!$invoice->nalogId) {
-            throw new RuntimeException('Фактурата нема доделено налог — не може да се знае како да се книжи.');
-        }
-
-        $nalog = $this->nalozi->find($invoice->nalogId);
-
-        if (!$nalog) {
-            throw new RuntimeException('Налогот на фактурата не постои.');
-        }
-
-        $terk = $this->terkovi->find($nalog->terkId);
+        $terk = $this->terkovi->find($terkId);
 
         if (!$terk || count($terk->lines) < 1) {
-            throw new RuntimeException("Теркот „{$nalog->name}“ нема дефинирани ставки за книжење.");
+            throw new RuntimeException('Избраниот терк нема дефинирани ставки за книжење.');
         }
 
         $amounts = [
@@ -181,7 +168,7 @@ class InvoiceService
         }
 
         if (count($journalLines) < 2) {
-            throw new RuntimeException("Теркот „{$nalog->name}“ произведува помалку од 2 ставки за книжење — провери го теркот.");
+            throw new RuntimeException("Теркот „{$terk->name}“ произведува помалку од 2 ставки за книжење — провери го теркот.");
         }
 
         $entryId = $this->ledger->postEntry(
@@ -191,7 +178,7 @@ class InvoiceService
             $journalLines
         );
 
-        $this->invoices->updateStatus($invoiceId, 'issued', $entryId);
+        $this->invoices->markIssued($invoiceId, $terkId, $entryId);
     }
 
     public function markPaid(int $invoiceId): void

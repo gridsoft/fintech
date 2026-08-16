@@ -10,7 +10,6 @@
             <thead class="table-light">
                 <tr>
                     <th>Назив</th>
-                    <th>Терк</th>
                     <th>Статус</th>
                     <th class="text-end">Акции</th>
                 </tr>
@@ -18,14 +17,12 @@
             <tbody>
                 <?php if (empty($nalozi)): ?>
                     <tr>
-                        <td colspan="4" class="text-center text-muted py-4">Нема дефинирани налози.</td>
+                        <td colspan="3" class="text-center text-muted py-4">Нема дефинирани налози.</td>
                     </tr>
                 <?php endif; ?>
                 <?php foreach ($nalozi as $nalog): ?>
-                    <?php $terk = $terkoviById[$nalog->terkId] ?? null; ?>
                     <tr>
                         <td class="fw-semibold"><?= htmlspecialchars($nalog->name) ?></td>
-                        <td class="text-muted"><?= $terk ? htmlspecialchars($terk->name) : '—' ?></td>
                         <td>
                             <?php if ($nalog->isActive): ?>
                                 <span class="badge text-bg-success-subtle text-success-emphasis">активен</span>

@@ -105,9 +105,9 @@ class TerkRepository
         $stmt->execute([$id]);
     }
 
-    public function isUsedByNalog(int $terkId): bool
+    public function isUsedByInvoice(int $terkId): bool
     {
-        $stmt = $this->db->prepare('SELECT COUNT(*) FROM nalozi WHERE terk_id = ?');
+        $stmt = $this->db->prepare('SELECT COUNT(*) FROM invoices WHERE terk_id = ?');
         $stmt->execute([$terkId]);
 
         return (int) $stmt->fetchColumn() > 0;

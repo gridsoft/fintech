@@ -101,15 +101,15 @@ class InvoiceRepository
         return (int) $this->db->lastInsertId();
     }
 
-    public function updateStatus(int $id, string $status, ?int $journalEntryId = null): void
+    public function updateStatus(int $id, string $status): void
     {
-        if ($journalEntryId !== null) {
-            $stmt = $this->db->prepare('UPDATE invoices SET status = ?, journal_entry_id = ? WHERE id = ?');
-            $stmt->execute([$status, $journalEntryId, $id]);
-            return;
-        }
-
         $stmt = $this->db->prepare('UPDATE invoices SET status = ? WHERE id = ?');
         $stmt->execute([$status, $id]);
+    }
+
+    public function markIssued(int $id, int $terkId, int $journalEntryId): void
+    {
+        $stmt = $this->db->prepare('UPDATE invoices SET status = ?, terk_id = ?, journal_entry_id = ? WHERE id = ?');
+        $stmt->execute(['issued', $terkId, $journalEntryId, $id]);
     }
 }

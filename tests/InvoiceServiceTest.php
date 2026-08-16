@@ -3,12 +3,10 @@
 namespace Tests;
 
 use App\Core\Database;
-use App\Domain\Accounting\Nalog;
 use App\Domain\Accounting\Terk;
 use App\Domain\Accounting\TerkLine;
 use App\Repository\AccountRepository;
 use App\Repository\InvoiceRepository;
-use App\Repository\NalogRepository;
 use App\Repository\TerkRepository;
 use App\Service\InvoiceService;
 use InvalidArgumentException;
@@ -23,7 +21,6 @@ class InvoiceServiceTest extends TestCase
     private InvoiceService $service;
     private int $partnerId;
     private int $terkId;
-    private int $nalogId;
     private array $createdInvoiceIds = [];
     private array $createdEntryIds = [];
 
@@ -32,24 +29,21 @@ class InvoiceServiceTest extends TestCase
         $this->db = Database::connection();
         $this->invoices = new InvoiceRepository();
         $terkRepo = new TerkRepository();
-        $nalogRepo = new NalogRepository();
-        $this->service = new InvoiceService($this->invoices, $nalogRepo, $terkRepo);
+        $this->service = new InvoiceService($this->invoices, $terkRepo);
 
         $stmt = $this->db->prepare("INSERT INTO partners (name, type) VALUES (?, 'customer')");
         $stmt->execute(['Тест партнер ' . uniqid()]);
         $this->partnerId = (int) $this->db->lastInsertId();
 
         $accounts = new AccountRepository();
-        $receivables = $accounts->findByCode('2200');
-        $revenue = $accounts->findByCode('6100');
-        $vat = $accounts->findByCode('4300');
+        $receivables = $accounts->findByCode('120');
+        $revenue = $accounts->findByCode('751');
+        $vat = $accounts->findByCode('260');
 
         $this->terkId = $terkRepo->create(new Terk('Тест терк ' . uniqid()));
         $terkRepo->insertLine(new TerkLine($receivables->id, 'debit', 'gross', true, 1, $this->terkId));
         $terkRepo->insertLine(new TerkLine($revenue->id, 'credit', 'net', false, 2, $this->terkId));
         $terkRepo->insertLine(new TerkLine($vat->id, 'credit', 'vat', false, 3, $this->terkId));
-
-        $this->nalogId = $nalogRepo->create(new Nalog('Тест налог ' . uniqid(), $this->terkId));
     }
 
     protected function tearDown(): void
@@ -62,14 +56,13 @@ class InvoiceServiceTest extends TestCase
             $this->db->prepare('DELETE FROM journal_entries WHERE id = ?')->execute([$id]);
         }
 
-        $this->db->prepare('DELETE FROM nalozi WHERE id = ?')->execute([$this->nalogId]);
         $this->db->prepare('DELETE FROM terkovi WHERE id = ?')->execute([$this->terkId]);
         $this->db->prepare('DELETE FROM partners WHERE id = ?')->execute([$this->partnerId]);
     }
 
     public function test_it_calculates_totals_from_lines_with_vat(): void
     {
-        $invoiceId = $this->service->createInvoice($this->partnerId, $this->nalogId, '2026-01-01', '2026-01-31', [
+        $invoiceId = $this->service->createInvoice($this->partnerId, null, '2026-01-01', '2026-01-31', [
             ['description' => 'Услуга А', 'quantity' => '2', 'unit_price' => '1000.00', 'vat_rate' => '18'],
             ['description' => 'Услуга Б', 'quantity' => '1', 'unit_price' => '500.00', 'vat_rate' => '5'],
         ]);
@@ -85,17 +78,18 @@ class InvoiceServiceTest extends TestCase
         $this->assertSame('draft', $invoice->status);
     }
 
-    public function test_issuing_generates_a_balanced_journal_entry_from_the_terk(): void
+    public function test_issuing_generates_a_balanced_journal_entry_from_the_chosen_terk(): void
     {
-        $invoiceId = $this->service->createInvoice($this->partnerId, $this->nalogId, '2026-01-01', '2026-01-31', [
+        $invoiceId = $this->service->createInvoice($this->partnerId, null, '2026-01-01', '2026-01-31', [
             ['description' => 'Услуга', 'quantity' => '1', 'unit_price' => '1000.00', 'vat_rate' => '18'],
         ]);
         $this->createdInvoiceIds[] = $invoiceId;
 
-        $this->service->issue($invoiceId);
+        $this->service->issue($invoiceId, $this->terkId);
 
         $invoice = $this->invoices->find($invoiceId);
         $this->assertSame('issued', $invoice->status);
+        $this->assertSame($this->terkId, $invoice->terkId);
         $this->assertNotNull($invoice->journalEntryId);
         $this->createdEntryIds[] = $invoice->journalEntryId;
 
@@ -118,12 +112,12 @@ class InvoiceServiceTest extends TestCase
 
     public function test_zero_vat_line_is_skipped_when_posting(): void
     {
-        $invoiceId = $this->service->createInvoice($this->partnerId, $this->nalogId, '2026-01-01', '2026-01-31', [
+        $invoiceId = $this->service->createInvoice($this->partnerId, null, '2026-01-01', '2026-01-31', [
             ['description' => 'Услуга без ДДВ', 'quantity' => '1', 'unit_price' => '500.00', 'vat_rate' => '0'],
         ]);
         $this->createdInvoiceIds[] = $invoiceId;
 
-        $this->service->issue($invoiceId);
+        $this->service->issue($invoiceId, $this->terkId);
 
         $invoice = $this->invoices->find($invoiceId);
         $this->createdEntryIds[] = $invoice->journalEntryId;
@@ -137,34 +131,23 @@ class InvoiceServiceTest extends TestCase
 
     public function test_it_cannot_issue_the_same_invoice_twice(): void
     {
-        $invoiceId = $this->service->createInvoice($this->partnerId, $this->nalogId, '2026-01-01', '2026-01-31', [
+        $invoiceId = $this->service->createInvoice($this->partnerId, null, '2026-01-01', '2026-01-31', [
             ['description' => 'Услуга', 'quantity' => '1', 'unit_price' => '100.00', 'vat_rate' => '0'],
         ]);
         $this->createdInvoiceIds[] = $invoiceId;
 
-        $this->service->issue($invoiceId);
+        $this->service->issue($invoiceId, $this->terkId);
         $invoice = $this->invoices->find($invoiceId);
         $this->createdEntryIds[] = $invoice->journalEntryId;
 
         $this->expectException(RuntimeException::class);
-        $this->service->issue($invoiceId);
-    }
-
-    public function test_it_cannot_issue_without_a_nalog(): void
-    {
-        $invoiceId = $this->service->createInvoice($this->partnerId, null, '2026-01-01', '2026-01-31', [
-            ['description' => 'Услуга', 'quantity' => '1', 'unit_price' => '100.00', 'vat_rate' => '18'],
-        ]);
-        $this->createdInvoiceIds[] = $invoiceId;
-
-        $this->expectException(RuntimeException::class);
-        $this->service->issue($invoiceId);
+        $this->service->issue($invoiceId, $this->terkId);
     }
 
     public function test_it_requires_at_least_one_line(): void
     {
         $this->expectException(InvalidArgumentException::class);
 
-        $this->service->createInvoice($this->partnerId, $this->nalogId, '2026-01-01', '2026-01-31', []);
+        $this->service->createInvoice($this->partnerId, null, '2026-01-01', '2026-01-31', []);
     }
 }

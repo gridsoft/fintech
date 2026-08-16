@@ -8,8 +8,11 @@ use App\Repository\PartnerRepository;
 
 class ReportService
 {
-    private const ACCOUNT_VAT_OUTPUT = '4300';
-    private const ACCOUNT_VAT_INPUT = '2450';
+    // Според официјалниот сметковен план (Сл. весник на РМ бр. 113/06):
+    // 260 - Обврски за данокот на додадена вредност (излезен ДДВ)
+    // 160 - Данок на додадена вредност, во рамки на побарувања од државата (влезен ДДВ)
+    private const ACCOUNT_VAT_OUTPUT = '260';
+    private const ACCOUNT_VAT_INPUT = '160';
 
     private JournalRepository $journal;
     private AccountRepository $accounts;
