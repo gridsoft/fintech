@@ -1,0 +1,17 @@
+{
+    "name": "bobi/fintech",
+    "description": "Сметководствен софтвер за МК",
+    "type": "project",
+    "require": {
+        "php": ">=7.4",
+        "ext-pdo": "*"
+    },
+    "autoload": {
+        "psr-4": {
+            "App\\": "src/"
+        }
+    },
+    "config": {
+        "optimize-autoloader": true
+    }
+}
