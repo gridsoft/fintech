@@ -49,12 +49,23 @@
                 <i class="bi bi-bar-chart-fill"></i> <span>Извештаи</span>
             </a>
 
-            <div class="sidebar-heading">Поставки</div>
-            <a href="/nalozi" class="sidebar-link <?= ($activeNav ?? '') === 'nalozi' ? 'active' : '' ?>">
-                <i class="bi bi-file-earmark-text"></i> <span>Налози</span>
+            <div class="sidebar-heading">Каталог</div>
+            <a href="/product-categories" class="sidebar-link <?= ($activeNav ?? '') === 'product-categories' ? 'active' : '' ?>">
+                <i class="bi bi-tags-fill"></i> <span>Категории производи</span>
             </a>
-            <a href="/terkovi" class="sidebar-link <?= ($activeNav ?? '') === 'terkovi' ? 'active' : '' ?>">
-                <i class="bi bi-diagram-2-fill"></i> <span>Теркови</span>
+            <a href="/products" class="sidebar-link <?= ($activeNav ?? '') === 'products' ? 'active' : '' ?>">
+                <i class="bi bi-box-seam-fill"></i> <span>Производи</span>
+            </a>
+            <a href="/service-categories" class="sidebar-link <?= ($activeNav ?? '') === 'service-categories' ? 'active' : '' ?>">
+                <i class="bi bi-tags"></i> <span>Категории услуги</span>
+            </a>
+            <a href="/services" class="sidebar-link <?= ($activeNav ?? '') === 'services' ? 'active' : '' ?>">
+                <i class="bi bi-tools"></i> <span>Услуги</span>
+            </a>
+
+            <div class="sidebar-heading">Поставки</div>
+            <a href="/vat-rates" class="sidebar-link <?= ($activeNav ?? '') === 'vat-rates' ? 'active' : '' ?>">
+                <i class="bi bi-percent"></i> <span>ДДВ стапки</span>
             </a>
         </nav>
     </aside>

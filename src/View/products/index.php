@@ -1,6 +1,6 @@
 <div class="d-flex justify-content-end mb-3">
-    <a href="/nalozi/create" class="btn btn-primary">
-        <i class="bi bi-plus-lg"></i> Нов налог
+    <a href="/products/create" class="btn btn-primary">
+        <i class="bi bi-plus-lg"></i> Нов производ
     </a>
 </div>
 
@@ -10,32 +10,37 @@
             <thead class="table-light">
                 <tr>
                     <th>Назив</th>
+                    <th>Категорија</th>
+                    <th class="text-end">Цена</th>
                     <th>Статус</th>
                     <th class="text-end">Акции</th>
                 </tr>
             </thead>
             <tbody>
-                <?php if (empty($nalozi)): ?>
+                <?php if (empty($products)): ?>
                     <tr>
-                        <td colspan="3" class="text-center text-muted py-4">Нема дефинирани налози.</td>
+                        <td colspan="5" class="text-center text-muted py-4">Нема внесени производи.</td>
                     </tr>
                 <?php endif; ?>
-                <?php foreach ($nalozi as $nalog): ?>
+                <?php foreach ($products as $product): ?>
+                    <?php $category = $categoriesById[$product->categoryId] ?? null; ?>
                     <tr>
-                        <td class="fw-semibold"><?= htmlspecialchars($nalog->name) ?></td>
+                        <td class="fw-semibold"><?= htmlspecialchars($product->name) ?></td>
+                        <td class="text-muted"><?= $category ? htmlspecialchars($category->name) : '—' ?></td>
+                        <td class="text-end"><?= number_format((float) $product->price, 2) ?></td>
                         <td>
-                            <?php if ($nalog->isActive): ?>
+                            <?php if ($product->isActive): ?>
                                 <span class="badge text-bg-success-subtle text-success-emphasis">активен</span>
                             <?php else: ?>
                                 <span class="badge text-bg-secondary-subtle text-secondary-emphasis">неактивен</span>
                             <?php endif; ?>
                         </td>
                         <td class="text-end">
-                            <a href="/nalozi/<?= $nalog->id ?>/edit" class="btn btn-sm btn-outline-secondary">
+                            <a href="/products/<?= $product->id ?>/edit" class="btn btn-sm btn-outline-secondary">
                                 <i class="bi bi-pencil"></i>
                             </a>
-                            <form action="/nalozi/<?= $nalog->id ?>/delete" method="post" class="d-inline"
-                                  onsubmit="return confirm('Да се избрише налогот <?= htmlspecialchars(addslashes($nalog->name)) ?>?');">
+                            <form action="/products/<?= $product->id ?>/delete" method="post" class="d-inline"
+                                  onsubmit="return confirm('Да се избрише производот <?= htmlspecialchars(addslashes($product->name)) ?>?');">
                                 <button type="submit" class="btn btn-sm btn-outline-danger">
                                     <i class="bi bi-trash"></i>
                                 </button>

@@ -35,7 +35,7 @@ class PartnerRepository
     public function create(Partner $partner): int
     {
         $stmt = $this->db->prepare(
-            'INSERT INTO partners (name, type, tax_number, address, contact, is_active) VALUES (?, ?, ?, ?, ?, ?)'
+            'INSERT INTO partners (name, type, tax_number, address, contact, country, is_active) VALUES (?, ?, ?, ?, ?, ?, ?)'
         );
         $stmt->execute([
             $partner->name,
@@ -43,6 +43,7 @@ class PartnerRepository
             $partner->taxNumber,
             $partner->address,
             $partner->contact,
+            $partner->country,
             $partner->isActive ? 1 : 0,
         ]);
 
@@ -52,7 +53,7 @@ class PartnerRepository
     public function update(Partner $partner): void
     {
         $stmt = $this->db->prepare(
-            'UPDATE partners SET name = ?, type = ?, tax_number = ?, address = ?, contact = ?, is_active = ? WHERE id = ?'
+            'UPDATE partners SET name = ?, type = ?, tax_number = ?, address = ?, contact = ?, country = ?, is_active = ? WHERE id = ?'
         );
         $stmt->execute([
             $partner->name,
@@ -60,6 +61,7 @@ class PartnerRepository
             $partner->taxNumber,
             $partner->address,
             $partner->contact,
+            $partner->country,
             $partner->isActive ? 1 : 0,
             $partner->id,
         ]);

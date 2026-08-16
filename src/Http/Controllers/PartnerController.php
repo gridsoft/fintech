@@ -61,6 +61,7 @@ class PartnerController
             trim((string) $request->input('tax_number')) ?: null,
             trim((string) $request->input('address')) ?: null,
             trim((string) $request->input('contact')) ?: null,
+            strtoupper(trim((string) $request->input('country'))) ?: 'MK',
             $request->input('is_active') === '1'
         );
 
@@ -114,6 +115,7 @@ class PartnerController
         $partner->taxNumber = trim((string) $request->input('tax_number')) ?: null;
         $partner->address = trim((string) $request->input('address')) ?: null;
         $partner->contact = trim((string) $request->input('contact')) ?: null;
+        $partner->country = strtoupper(trim((string) $request->input('country'))) ?: 'MK';
         $partner->isActive = $request->input('is_active') === '1';
 
         $this->partners->update($partner);

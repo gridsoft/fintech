@@ -5,40 +5,80 @@ namespace App\Service;
 use App\Core\Database;
 use App\Domain\Invoicing\Invoice;
 use App\Domain\Invoicing\InvoiceLine;
+use App\Repository\AccountRepository;
 use App\Repository\InvoiceRepository;
-use App\Repository\TerkRepository;
+use App\Repository\PartnerRepository;
+use App\Repository\ProductCategoryRepository;
+use App\Repository\ProductRepository;
+use App\Repository\ServiceCategoryRepository;
+use App\Repository\ServiceRepository;
+use App\Repository\VatRateRepository;
 use InvalidArgumentException;
 use PDO;
 use RuntimeException;
 use Throwable;
 
+/**
+ * Сметките и ДДВ стапките никогаш не се бираат рачно на фактурата — се
+ * резолвираат автоматски од категоријата на производот/услугата и од
+ * контекстот (домашен/странски партнер). Види POSTING_RULES_ADDENDUM.md.
+ */
 class InvoiceService
 {
+    private const ACCOUNT_RECEIVABLES_DOMESTIC = '120';
+    private const ACCOUNT_RECEIVABLES_FOREIGN = '121';
+
     private PDO $db;
     private InvoiceRepository $invoices;
-    private TerkRepository $terkovi;
+    private PartnerRepository $partners;
+    private ProductRepository $products;
+    private ProductCategoryRepository $productCategories;
+    private ServiceRepository $services;
+    private ServiceCategoryRepository $serviceCategories;
+    private VatRateRepository $vatRates;
+    private AccountRepository $accounts;
     private LedgerService $ledger;
 
     public function __construct(
         ?InvoiceRepository $invoices = null,
-        ?TerkRepository $terkovi = null,
+        ?PartnerRepository $partners = null,
+        ?ProductRepository $products = null,
+        ?ProductCategoryRepository $productCategories = null,
+        ?ServiceRepository $services = null,
+        ?ServiceCategoryRepository $serviceCategories = null,
+        ?VatRateRepository $vatRates = null,
+        ?AccountRepository $accounts = null,
         ?LedgerService $ledger = null
     ) {
         $this->db = Database::connection();
         $this->invoices = $invoices ?? new InvoiceRepository();
-        $this->terkovi = $terkovi ?? new TerkRepository();
+        $this->partners = $partners ?? new PartnerRepository();
+        $this->products = $products ?? new ProductRepository();
+        $this->productCategories = $productCategories ?? new ProductCategoryRepository();
+        $this->services = $services ?? new ServiceRepository();
+        $this->serviceCategories = $serviceCategories ?? new ServiceCategoryRepository();
+        $this->vatRates = $vatRates ?? new VatRateRepository();
+        $this->accounts = $accounts ?? new AccountRepository();
         $this->ledger = $ledger ?? new LedgerService();
     }
 
     /**
-     * Создава фактура (статус draft) + линии. Вкупните износи се пресметуваат од линиите.
+     * Создава фактура (статус draft). Секоја линија упатува на производ ИЛИ
+     * услуга; сметката и ДДВ стапката се резолвираат тука (од категоријата +
+     * контекст домашен/странски) и се замрзнуваат на линијата.
      *
-     * @param array<int, array{description: string, quantity: string|float, unit_price: string|float, vat_rate: string|float}> $lines
+     * @param array<int, array{type: string, item_id: int, quantity: string|float, unit_price?: string|float|null, description?: ?string}> $lines
      */
-    public function createInvoice(int $partnerId, ?int $nalogId, string $date, string $dueDate, array $lines): int
+    public function createInvoice(int $partnerId, string $date, string $dueDate, array $lines): int
     {
         if (count($lines) < 1) {
             throw new InvalidArgumentException('Фактурата мора да содржи барем 1 ставка.');
+        }
+
+        $partner = $this->partners->find($partnerId);
+
+        if (!$partner) {
+            throw new InvalidArgumentException('Партнерот не е пронајден.');
         }
 
         $normalized = [];
@@ -46,35 +86,50 @@ class InvoiceService
         $totalVat = 0.0;
 
         foreach ($lines as $line) {
-            $description = trim((string) ($line['description'] ?? ''));
-
-            if ($description === '') {
-                throw new InvalidArgumentException('Секоја ставка мора да има опис.');
-            }
-
+            $type = $line['type'] ?? '';
+            $itemId = (int) ($line['item_id'] ?? 0);
             $quantity = (float) ($line['quantity'] ?? 0);
-            $unitPrice = (float) ($line['unit_price'] ?? 0);
-            $vatRate = (float) ($line['vat_rate'] ?? 0);
+
+            if ($itemId <= 0 || !in_array($type, ['product', 'service'], true)) {
+                throw new InvalidArgumentException('Секоја ставка мора да има избрано производ или услуга.');
+            }
 
             if ($quantity <= 0) {
                 throw new InvalidArgumentException('Количината мора да биде поголема од нула.');
             }
 
+            [$defaultPrice, $accountId, $vatRateId] = $this->resolveLine($type, $itemId, $partner->isForeign());
+
+            $unitPriceInput = $line['unit_price'] ?? null;
+            $unitPrice = ($unitPriceInput === null || $unitPriceInput === '')
+                ? (float) $defaultPrice
+                : (float) $unitPriceInput;
+
             if ($unitPrice < 0) {
                 throw new InvalidArgumentException('Единечната цена не може да биде негативна.');
             }
 
+            $vatRate = $this->vatRates->find($vatRateId);
+
+            if (!$vatRate) {
+                throw new RuntimeException('Резолвираната ДДВ стапка не постои.');
+            }
+
             $lineTotal = round($quantity * $unitPrice, 2);
-            $lineVat = round($lineTotal * $vatRate / 100, 2);
+            $lineVat = round($lineTotal * (float) $vatRate->rate / 100, 2);
 
             $totalNet += $lineTotal;
             $totalVat += $lineVat;
 
             $normalized[] = [
-                'description' => $description,
+                'product_id' => $type === 'product' ? $itemId : null,
+                'service_id' => $type === 'service' ? $itemId : null,
+                'description' => trim((string) ($line['description'] ?? '')) ?: null,
                 'quantity' => number_format($quantity, 2, '.', ''),
                 'unit_price' => number_format($unitPrice, 2, '.', ''),
-                'vat_rate' => number_format($vatRate, 2, '.', ''),
+                'account_id' => $accountId,
+                'vat_rate_id' => $vatRateId,
+                'vat_rate' => $vatRate->rate,
                 'line_total' => number_format($lineTotal, 2, '.', ''),
             ];
         }
@@ -88,7 +143,6 @@ class InvoiceService
         try {
             $invoice = new Invoice(
                 $partnerId,
-                $nalogId,
                 $this->invoices->nextNumber(),
                 $date,
                 $dueDate,
@@ -102,11 +156,15 @@ class InvoiceService
 
             foreach ($normalized as $line) {
                 $this->invoices->insertLine(new InvoiceLine(
-                    $line['description'],
                     $line['quantity'],
                     $line['unit_price'],
+                    $line['account_id'],
+                    $line['vat_rate_id'],
                     $line['vat_rate'],
                     $line['line_total'],
+                    $line['product_id'],
+                    $line['service_id'],
+                    $line['description'],
                     $invoiceId
                 ));
             }
@@ -120,12 +178,51 @@ class InvoiceService
         }
     }
 
+    /** @return array{0: string, 1: int, 2: int} [defaultPrice, accountId, vatRateId] */
+    private function resolveLine(string $type, int $itemId, bool $isForeign): array
+    {
+        if ($type === 'product') {
+            $product = $this->products->find($itemId);
+
+            if (!$product) {
+                throw new InvalidArgumentException('Избраниот производ не постои.');
+            }
+
+            $category = $this->productCategories->find($product->categoryId);
+
+            if (!$category) {
+                throw new RuntimeException('Категоријата на производот не постои.');
+            }
+
+            $resolved = $category->resolveFor($isForeign);
+
+            return [$product->price, $resolved['account_id'], $resolved['vat_rate_id']];
+        }
+
+        $service = $this->services->find($itemId);
+
+        if (!$service) {
+            throw new InvalidArgumentException('Избраната услуга не постои.');
+        }
+
+        $category = $this->serviceCategories->find($service->categoryId);
+
+        if (!$category) {
+            throw new RuntimeException('Категоријата на услугата не постои.');
+        }
+
+        $resolved = $category->resolveFor($isForeign);
+
+        return [$service->price, $resolved['account_id'], $resolved['vat_rate_id']];
+    }
+
     /**
-     * Ја издава фактурата: книжењето се гради динамички според теркот што корисникот
-     * го избира токму сега (секоја линија од теркот вели која сметка, дебит/кредит
-     * и од кој износ — нето/ддв/бруто).
+     * Ја издава фактурата. Книжењето се гради по алгоритмот од addendum-от:
+     * 1 дебит ред (побарувања, бруто) + групирани кредит редови по сметка
+     * (нето, по резолвирана приходна сметка) + групирани кредит редови по
+     * ДДВ стапка (износ на ДДВ, по нејзината сметка за обврска).
      */
-    public function issue(int $invoiceId, int $terkId): void
+    public function issue(int $invoiceId): void
     {
         $invoice = $this->invoices->find($invoiceId);
 
@@ -137,38 +234,75 @@ class InvoiceService
             throw new RuntimeException('Само фактура во статус „нацрт“ може да се издаде.');
         }
 
-        $terk = $this->terkovi->find($terkId);
+        $partner = $this->partners->find($invoice->partnerId);
 
-        if (!$terk || count($terk->lines) < 1) {
-            throw new RuntimeException('Избраниот терк нема дефинирани ставки за книжење.');
+        if (!$partner) {
+            throw new RuntimeException('Партнерот на фактурата не постои.');
         }
 
-        $amounts = [
-            'net' => $invoice->totalNet,
-            'vat' => $invoice->totalVat,
-            'gross' => $invoice->totalGross,
-        ];
+        $receivablesCode = $partner->isForeign() ? self::ACCOUNT_RECEIVABLES_FOREIGN : self::ACCOUNT_RECEIVABLES_DOMESTIC;
+        $receivablesAccount = $this->accounts->findByCode($receivablesCode);
 
-        $journalLines = [];
+        if (!$receivablesAccount) {
+            throw new RuntimeException("Не постои стандардна сметка за побарувања ($receivablesCode) во контниот план.");
+        }
 
-        foreach ($terk->lines as $terkLine) {
-            $amount = $amounts[$terkLine->amountSource] ?? '0.00';
+        $revenueByAccount = [];
+        $vatByRate = [];
 
-            if ((float) $amount <= 0) {
+        foreach ($invoice->lines as $line) {
+            $revenueByAccount[$line->accountId] = bcadd($revenueByAccount[$line->accountId] ?? '0.00', $line->lineTotal, 2);
+
+            $vatAmount = number_format($line->vatAmount(), 2, '.', '');
+            $vatByRate[$line->vatRateId] = bcadd($vatByRate[$line->vatRateId] ?? '0.00', $vatAmount, 2);
+        }
+
+        $journalLines = [[
+            'account_id' => $receivablesAccount->id,
+            'partner_id' => $invoice->partnerId,
+            'debit' => $invoice->totalGross,
+            'credit' => '0',
+            'description' => "Фактура {$invoice->number}",
+        ]];
+
+        foreach ($revenueByAccount as $accountId => $amount) {
+            if (bccomp($amount, '0.00', 2) <= 0) {
                 continue;
             }
 
             $journalLines[] = [
-                'account_id' => $terkLine->accountId,
-                'partner_id' => $terkLine->tagPartner ? $invoice->partnerId : null,
-                'debit' => $terkLine->side === 'debit' ? $amount : '0',
-                'credit' => $terkLine->side === 'credit' ? $amount : '0',
+                'account_id' => $accountId,
+                'debit' => '0',
+                'credit' => $amount,
                 'description' => "Фактура {$invoice->number}",
             ];
         }
 
+        foreach ($vatByRate as $vatRateId => $amount) {
+            if (bccomp($amount, '0.00', 2) <= 0) {
+                continue;
+            }
+
+            $vatRate = $this->vatRates->find($vatRateId);
+
+            if (!$vatRate) {
+                throw new RuntimeException('Резолвираната ДДВ стапка повеќе не постои.');
+            }
+
+            if (!$vatRate->payableAccountId) {
+                throw new RuntimeException("ДДВ стапката „{$vatRate->name}“ нема поврзано сметка за обврска — не може да се книжи ДДВ.");
+            }
+
+            $journalLines[] = [
+                'account_id' => $vatRate->payableAccountId,
+                'debit' => '0',
+                'credit' => $amount,
+                'description' => "ДДВ по фактура {$invoice->number}",
+            ];
+        }
+
         if (count($journalLines) < 2) {
-            throw new RuntimeException("Теркот „{$terk->name}“ произведува помалку од 2 ставки за книжење — провери го теркот.");
+            throw new RuntimeException('Фактурата нема ставки за книжење.');
         }
 
         $entryId = $this->ledger->postEntry(
@@ -178,7 +312,7 @@ class InvoiceService
             $journalLines
         );
 
-        $this->invoices->markIssued($invoiceId, $terkId, $entryId);
+        $this->invoices->markIssued($invoiceId, $entryId);
     }
 
     public function markPaid(int $invoiceId): void

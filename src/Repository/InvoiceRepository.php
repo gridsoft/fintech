@@ -65,12 +65,11 @@ class InvoiceRepository
     public function create(Invoice $invoice): int
     {
         $stmt = $this->db->prepare(
-            'INSERT INTO invoices (partner_id, nalog_id, number, invoice_date, due_date, status, total_net, total_vat, total_gross)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+            'INSERT INTO invoices (partner_id, number, invoice_date, due_date, status, total_net, total_vat, total_gross)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
         );
         $stmt->execute([
             $invoice->partnerId,
-            $invoice->nalogId,
             $invoice->number,
             $invoice->date,
             $invoice->dueDate,
@@ -86,14 +85,18 @@ class InvoiceRepository
     public function insertLine(InvoiceLine $line): int
     {
         $stmt = $this->db->prepare(
-            'INSERT INTO invoice_lines (invoice_id, description, quantity, unit_price, vat_rate, line_total)
-             VALUES (?, ?, ?, ?, ?, ?)'
+            'INSERT INTO invoice_lines (invoice_id, product_id, service_id, description, quantity, unit_price, account_id, vat_rate_id, vat_rate, line_total)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
         );
         $stmt->execute([
             $line->invoiceId,
+            $line->productId,
+            $line->serviceId,
             $line->description,
             $line->quantity,
             $line->unitPrice,
+            $line->accountId,
+            $line->vatRateId,
             $line->vatRate,
             $line->lineTotal,
         ]);
@@ -107,9 +110,9 @@ class InvoiceRepository
         $stmt->execute([$status, $id]);
     }
 
-    public function markIssued(int $id, int $terkId, int $journalEntryId): void
+    public function markIssued(int $id, int $journalEntryId): void
     {
-        $stmt = $this->db->prepare('UPDATE invoices SET status = ?, terk_id = ?, journal_entry_id = ? WHERE id = ?');
-        $stmt->execute(['issued', $terkId, $journalEntryId, $id]);
+        $stmt = $this->db->prepare('UPDATE invoices SET status = ?, journal_entry_id = ? WHERE id = ?');
+        $stmt->execute(['issued', $journalEntryId, $id]);
     }
 }

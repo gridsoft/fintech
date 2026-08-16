@@ -5,9 +5,9 @@ namespace App\Http\Controllers;
 use App\Core\Request;
 use App\Core\Response;
 use App\Repository\InvoiceRepository;
-use App\Repository\NalogRepository;
 use App\Repository\PartnerRepository;
-use App\Repository\TerkRepository;
+use App\Repository\ProductRepository;
+use App\Repository\ServiceRepository;
 use App\Service\InvoiceService;
 use InvalidArgumentException;
 use RuntimeException;
@@ -16,16 +16,16 @@ class InvoiceController
 {
     private InvoiceRepository $invoices;
     private PartnerRepository $partners;
-    private NalogRepository $nalozi;
-    private TerkRepository $terkovi;
+    private ProductRepository $products;
+    private ServiceRepository $services;
     private InvoiceService $service;
 
     public function __construct()
     {
         $this->invoices = new InvoiceRepository();
         $this->partners = new PartnerRepository();
-        $this->nalozi = new NalogRepository();
-        $this->terkovi = new TerkRepository();
+        $this->products = new ProductRepository();
+        $this->services = new ServiceRepository();
         $this->service = new InvoiceService($this->invoices);
     }
 
@@ -45,22 +45,20 @@ class InvoiceController
 
     public function create(Request $request): void
     {
-        $nalozi = $this->nalozi->allActive();
-
         Response::view('invoices/form', [
             'pageTitle' => 'Нова фактура',
             'activeNav' => 'invoices',
             'breadcrumb' => ['Почетна' => '/', 'Фактури' => '/invoices', 'Нова фактура'],
             'partners' => $this->partners->all(),
-            'nalozi' => $nalozi,
+            'products' => $this->products->allActive(),
+            'services' => $this->services->allActive(),
             'errors' => [],
             'old' => [
                 'partner_id' => '',
-                'nalog_id' => count($nalozi) === 1 ? (string) $nalozi[0]->id : '',
                 'date' => date('Y-m-d'),
                 'due_date' => date('Y-m-d', strtotime('+30 days')),
                 'lines' => [
-                    ['description' => '', 'quantity' => '1', 'unit_price' => '', 'vat_rate' => '18'],
+                    ['type' => '', 'item_id' => '', 'quantity' => '1', 'unit_price' => '', 'description' => ''],
                 ],
             ],
         ]);
@@ -69,7 +67,6 @@ class InvoiceController
     public function store(Request $request): void
     {
         $partnerId = $request->input('partner_id');
-        $nalogId = $request->input('nalog_id');
         $date = $request->input('date');
         $dueDate = $request->input('due_date');
         $lines = $this->collectLines($request);
@@ -78,10 +75,6 @@ class InvoiceController
 
         if (!$partnerId) {
             $errors['partner_id'] = 'Изберете партнер.';
-        }
-
-        if (!$nalogId) {
-            $errors['nalog_id'] = 'Изберете налог.';
         }
 
         if (!$date) {
@@ -94,7 +87,7 @@ class InvoiceController
 
         if (!$errors) {
             try {
-                $invoiceId = $this->service->createInvoice((int) $partnerId, (int) $nalogId, $date, $dueDate, $lines);
+                $invoiceId = $this->service->createInvoice((int) $partnerId, $date, $dueDate, $lines);
                 Response::redirect("/invoices/$invoiceId");
                 return;
             } catch (InvalidArgumentException $e) {
@@ -107,15 +100,15 @@ class InvoiceController
             'activeNav' => 'invoices',
             'breadcrumb' => ['Почетна' => '/', 'Фактури' => '/invoices', 'Нова фактура'],
             'partners' => $this->partners->all(),
-            'nalozi' => $this->nalozi->allActive(),
+            'products' => $this->products->allActive(),
+            'services' => $this->services->allActive(),
             'errors' => $errors,
             'old' => [
                 'partner_id' => $partnerId,
-                'nalog_id' => $nalogId,
                 'date' => $date,
                 'due_date' => $dueDate,
                 'lines' => $lines ?: [
-                    ['description' => '', 'quantity' => '1', 'unit_price' => '', 'vat_rate' => '18'],
+                    ['type' => '', 'item_id' => '', 'quantity' => '1', 'unit_price' => '', 'description' => ''],
                 ],
             ],
         ]);
@@ -131,8 +124,8 @@ class InvoiceController
         }
 
         $partner = $this->partners->find($invoice->partnerId);
-        $nalog = $invoice->nalogId ? $this->nalozi->find($invoice->nalogId) : null;
-        $terk = $invoice->terkId ? $this->terkovi->find($invoice->terkId) : null;
+        $productsById = $this->productsById();
+        $servicesById = $this->servicesById();
 
         Response::view('invoices/show', [
             'pageTitle' => "Фактура {$invoice->number}",
@@ -140,23 +133,15 @@ class InvoiceController
             'breadcrumb' => ['Почетна' => '/', 'Фактури' => '/invoices', $invoice->number],
             'invoice' => $invoice,
             'partner' => $partner,
-            'nalog' => $nalog,
-            'terk' => $terk,
-            'terkovi' => $this->terkovi->all(),
+            'productsById' => $productsById,
+            'servicesById' => $servicesById,
         ]);
     }
 
     public function issue(Request $request, string $id): void
     {
-        $terkId = $request->input('terk_id');
-
-        if (!$terkId) {
-            Response::html('<h1>Грешка</h1><p>Изберете терк со кој ќе се книжи фактурата.</p><p><a href="/invoices/' . (int) $id . '">Назад</a></p>', 422);
-            return;
-        }
-
         try {
-            $this->service->issue((int) $id, (int) $terkId);
+            $this->service->issue((int) $id);
         } catch (InvalidArgumentException|RuntimeException $e) {
             Response::html('<h1>Грешка</h1><p>' . htmlspecialchars($e->getMessage()) . '</p><p><a href="/invoices/' . (int) $id . '">Назад</a></p>', 422);
             return;
@@ -191,22 +176,25 @@ class InvoiceController
 
     private function collectLines(Request $request): array
     {
-        $descriptions = $request->input('line_description', []);
+        $items = $request->input('line_item', []);
         $quantities = $request->input('line_quantity', []);
         $unitPrices = $request->input('line_unit_price', []);
-        $vatRates = $request->input('line_vat_rate', []);
+        $descriptions = $request->input('line_description', []);
 
         $lines = [];
-        foreach ($descriptions as $i => $description) {
-            if (trim((string) $description) === '') {
+        foreach ($items as $i => $item) {
+            if ($item === '') {
                 continue;
             }
 
+            [$type, $itemId] = array_pad(explode(':', $item, 2), 2, null);
+
             $lines[] = [
-                'description' => $description,
+                'type' => $type,
+                'item_id' => $itemId,
                 'quantity' => $quantities[$i] ?? '',
                 'unit_price' => $unitPrices[$i] ?? '',
-                'vat_rate' => $vatRates[$i] ?? '',
+                'description' => $descriptions[$i] ?? '',
             ];
         }
 
@@ -219,5 +207,21 @@ class InvoiceController
         $partners = $this->partners->all();
 
         return array_combine(array_map(fn ($p) => $p->id, $partners), $partners);
+    }
+
+    /** @return array<int, \App\Domain\Invoicing\Product> */
+    private function productsById(): array
+    {
+        $products = $this->products->all();
+
+        return array_combine(array_map(fn ($p) => $p->id, $products), $products);
+    }
+
+    /** @return array<int, \App\Domain\Invoicing\Service> */
+    private function servicesById(): array
+    {
+        $services = $this->services->all();
+
+        return array_combine(array_map(fn ($s) => $s->id, $services), $services);
     }
 }

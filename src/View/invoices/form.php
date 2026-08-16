@@ -2,45 +2,64 @@
     <div class="alert alert-danger"><?= htmlspecialchars($errors['lines']) ?></div>
 <?php endif; ?>
 
+<?php
+$itemOptions = function ($selectedValue = null) use ($products, $services) {
+    ?>
+    <option value="">— избери производ/услуга —</option>
+    <?php if (!empty($products)): ?>
+        <optgroup label="Производи">
+            <?php foreach ($products as $product): ?>
+                <?php $value = "product:{$product->id}"; ?>
+                <option value="<?= $value ?>" data-price="<?= htmlspecialchars($product->price) ?>" <?= $selectedValue === $value ? 'selected' : '' ?>>
+                    <?= htmlspecialchars($product->name) ?>
+                </option>
+            <?php endforeach; ?>
+        </optgroup>
+    <?php endif; ?>
+    <?php if (!empty($services)): ?>
+        <optgroup label="Услуги">
+            <?php foreach ($services as $service): ?>
+                <?php $value = "service:{$service->id}"; ?>
+                <option value="<?= $value ?>" data-price="<?= htmlspecialchars($service->price) ?>" <?= $selectedValue === $value ? 'selected' : '' ?>>
+                    <?= htmlspecialchars($service->name) ?>
+                </option>
+            <?php endforeach; ?>
+        </optgroup>
+    <?php endif; ?>
+    <?php
+};
+?>
+
+<?php if (empty($products) && empty($services)): ?>
+    <div class="alert alert-warning">
+        Нема внесени производи или услуги. <a href="/products/create">Додади производ</a> или <a href="/services/create">додади услуга</a> пред да можеш да создадеш фактура —
+        сметката и ДДВ стапката се резолвираат автоматски од категоријата, не се бираат рачно.
+    </div>
+<?php endif; ?>
+
 <div class="card">
     <div class="card-body">
         <form method="post" action="/invoices">
             <div class="row g-3 mb-3">
-                <div class="col-md-4">
+                <div class="col-md-5">
                     <label for="partner_id" class="form-label">Партнер</label>
                     <select id="partner_id" name="partner_id" class="form-select <?= isset($errors['partner_id']) ? 'is-invalid' : '' ?>">
                         <option value="">— избери партнер —</option>
                         <?php foreach ($partners as $partner): ?>
                             <option value="<?= $partner->id ?>" <?= (string) $old['partner_id'] === (string) $partner->id ? 'selected' : '' ?>>
-                                <?= htmlspecialchars($partner->name) ?>
+                                <?= htmlspecialchars($partner->name) ?><?= $partner->isForeign() ? ' (странски)' : '' ?>
                             </option>
                         <?php endforeach; ?>
                     </select>
                     <?php if (isset($errors['partner_id'])): ?><div class="invalid-feedback"><?= htmlspecialchars($errors['partner_id']) ?></div><?php endif; ?>
                 </div>
-                <div class="col-md-4">
-                    <label for="nalog_id" class="form-label">Налог</label>
-                    <select id="nalog_id" name="nalog_id" class="form-select <?= isset($errors['nalog_id']) ? 'is-invalid' : '' ?>">
-                        <option value="">— избери налог —</option>
-                        <?php foreach ($nalozi as $nalog): ?>
-                            <option value="<?= $nalog->id ?>" <?= (string) $old['nalog_id'] === (string) $nalog->id ? 'selected' : '' ?>>
-                                <?= htmlspecialchars($nalog->name) ?>
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
-                    <?php if (isset($errors['nalog_id'])): ?>
-                        <div class="invalid-feedback"><?= htmlspecialchars($errors['nalog_id']) ?></div>
-                    <?php else: ?>
-                        <div class="form-text">Тип документ за фактурата. <a href="/nalozi" target="_blank">Уреди налози →</a></div>
-                    <?php endif; ?>
-                </div>
-                <div class="col-md-2">
+                <div class="col-md-3">
                     <label for="date" class="form-label">Датум</label>
                     <input type="date" id="date" name="date" class="form-control <?= isset($errors['date']) ? 'is-invalid' : '' ?>"
                            value="<?= htmlspecialchars($old['date']) ?>" required>
                     <?php if (isset($errors['date'])): ?><div class="invalid-feedback"><?= htmlspecialchars($errors['date']) ?></div><?php endif; ?>
                 </div>
-                <div class="col-md-2">
+                <div class="col-md-4">
                     <label for="due_date" class="form-label">Рок на плаќање</label>
                     <input type="date" id="due_date" name="due_date" class="form-control <?= isset($errors['due_date']) ? 'is-invalid' : '' ?>"
                            value="<?= htmlspecialchars($old['due_date']) ?>" required>
@@ -52,27 +71,26 @@
             <table class="table align-middle" id="lines-table">
                 <thead class="table-light">
                     <tr>
-                        <th style="width: 34%">Опис</th>
-                        <th style="width: 13%">Количина</th>
-                        <th style="width: 16%">Ед. цена</th>
-                        <th style="width: 13%">ДДВ %</th>
+                        <th style="width: 28%">Производ / Услуга</th>
+                        <th style="width: 20%">Забелешка</th>
+                        <th style="width: 12%">Количина</th>
+                        <th style="width: 14%">Ед. цена</th>
                         <th style="width: 16%">Вкупно (нето)</th>
                         <th></th>
                     </tr>
                 </thead>
                 <tbody>
                     <?php foreach ($old['lines'] as $line): ?>
+                        <?php $itemValue = ($line['type'] ?? '') && ($line['item_id'] ?? '') ? "{$line['type']}:{$line['item_id']}" : ''; ?>
                         <tr class="line-row">
-                            <td><input type="text" name="line_description[]" class="form-control" value="<?= htmlspecialchars($line['description'] ?? '') ?>"></td>
-                            <td><input type="number" step="0.01" min="0.01" name="line_quantity[]" class="form-control line-qty" value="<?= htmlspecialchars($line['quantity'] ?? '1') ?>"></td>
-                            <td><input type="number" step="0.01" min="0" name="line_unit_price[]" class="form-control line-price" value="<?= htmlspecialchars($line['unit_price'] ?? '') ?>"></td>
                             <td>
-                                <select name="line_vat_rate[]" class="form-select line-vat">
-                                    <?php foreach (['18', '10', '5', '0'] as $rate): ?>
-                                        <option value="<?= $rate ?>" <?= (string) ($line['vat_rate'] ?? '18') === $rate ? 'selected' : '' ?>><?= $rate ?>%</option>
-                                    <?php endforeach; ?>
+                                <select name="line_item[]" class="form-select line-item">
+                                    <?php $itemOptions($itemValue); ?>
                                 </select>
                             </td>
+                            <td><input type="text" name="line_description[]" class="form-control" value="<?= htmlspecialchars($line['description'] ?? '') ?>"></td>
+                            <td><input type="number" step="0.01" min="0.01" name="line_quantity[]" class="form-control line-qty" value="<?= htmlspecialchars($line['quantity'] ?? '1') ?>"></td>
+                            <td><input type="number" step="0.01" min="0" name="line_unit_price[]" class="form-control line-price" placeholder="стандардна" value="<?= htmlspecialchars($line['unit_price'] ?? '') ?>"></td>
                             <td class="line-total text-end">0.00</td>
                             <td><button type="button" class="btn btn-sm btn-outline-danger remove-line"><i class="bi bi-x-lg"></i></button></td>
                         </tr>
@@ -80,23 +98,14 @@
                 </tbody>
                 <tfoot>
                     <tr>
-                        <td colspan="4" class="text-end fw-semibold">Нето:</td>
+                        <td colspan="4" class="text-end fw-semibold">Нето (проценето):</td>
                         <td class="text-end fw-semibold" id="sum-net">0.00</td>
-                        <td></td>
-                    </tr>
-                    <tr>
-                        <td colspan="4" class="text-end fw-semibold">ДДВ:</td>
-                        <td class="text-end fw-semibold" id="sum-vat">0.00</td>
-                        <td></td>
-                    </tr>
-                    <tr>
-                        <td colspan="4" class="text-end fw-semibold">Вкупно:</td>
-                        <td class="text-end fw-semibold" id="sum-gross">0.00</td>
                         <td></td>
                     </tr>
                 </tfoot>
             </table>
             </div>
+            <p class="small text-muted">Сметката и ДДВ стапката се одредуваат автоматски од категоријата на производот/услугата и дали партнерот е домашен/странски — не се бираат тука. Ед. цена е опционална — ако е празна, се користи стандардната цена на производот/услугата.</p>
 
             <button type="button" class="btn btn-outline-secondary btn-sm mb-3" id="add-line">
                 <i class="bi bi-plus-lg"></i> Додади ставка
@@ -112,17 +121,14 @@
 
 <template id="line-template">
     <tr class="line-row">
-        <td><input type="text" name="line_description[]" class="form-control"></td>
-        <td><input type="number" step="0.01" min="0.01" name="line_quantity[]" class="form-control line-qty" value="1"></td>
-        <td><input type="number" step="0.01" min="0" name="line_unit_price[]" class="form-control line-price"></td>
         <td>
-            <select name="line_vat_rate[]" class="form-select line-vat">
-                <option value="18" selected>18%</option>
-                <option value="10">10%</option>
-                <option value="5">5%</option>
-                <option value="0">0%</option>
+            <select name="line_item[]" class="form-select line-item">
+                <?php $itemOptions(); ?>
             </select>
         </td>
+        <td><input type="text" name="line_description[]" class="form-control"></td>
+        <td><input type="number" step="0.01" min="0.01" name="line_quantity[]" class="form-control line-qty" value="1"></td>
+        <td><input type="number" step="0.01" min="0" name="line_unit_price[]" class="form-control line-price" placeholder="стандардна"></td>
         <td class="line-total text-end">0.00</td>
         <td><button type="button" class="btn btn-sm btn-outline-danger remove-line"><i class="bi bi-x-lg"></i></button></td>
     </tr>
@@ -133,28 +139,27 @@
     var tbody = document.querySelector('#lines-table tbody');
     var template = document.getElementById('line-template');
     var sumNetEl = document.getElementById('sum-net');
-    var sumVatEl = document.getElementById('sum-vat');
-    var sumGrossEl = document.getElementById('sum-gross');
 
     function recalc() {
-        var net = 0, vat = 0;
+        var net = 0;
 
         tbody.querySelectorAll('.line-row').forEach(function (row) {
+            var select = row.querySelector('.line-item');
             var qty = parseFloat(row.querySelector('.line-qty').value) || 0;
-            var price = parseFloat(row.querySelector('.line-price').value) || 0;
-            var rate = parseFloat(row.querySelector('.line-vat').value) || 0;
+            var priceInput = row.querySelector('.line-price');
+            var price = parseFloat(priceInput.value);
+
+            if (isNaN(price)) {
+                var opt = select.options[select.selectedIndex];
+                price = opt ? (parseFloat(opt.getAttribute('data-price')) || 0) : 0;
+            }
+
             var lineTotal = Math.round(qty * price * 100) / 100;
-            var lineVat = Math.round(lineTotal * rate) / 100;
-
             row.querySelector('.line-total').textContent = lineTotal.toFixed(2);
-
             net += lineTotal;
-            vat += lineVat;
         });
 
         sumNetEl.textContent = net.toFixed(2);
-        sumVatEl.textContent = vat.toFixed(2);
-        sumGrossEl.textContent = (net + vat).toFixed(2);
     }
 
     document.getElementById('add-line').addEventListener('click', function () {
@@ -171,6 +176,7 @@
     });
 
     tbody.addEventListener('input', recalc);
+    tbody.addEventListener('change', recalc);
 
     recalc();
 })();

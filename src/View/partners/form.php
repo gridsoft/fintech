@@ -28,10 +28,17 @@
                        value="<?= htmlspecialchars($partner->taxNumber ?? '') ?>">
             </div>
 
-            <div class="col-md-8">
+            <div class="col-md-6">
                 <label for="address" class="form-label">Адреса</label>
                 <input type="text" id="address" name="address" class="form-control"
                        value="<?= htmlspecialchars($partner->address ?? '') ?>">
+            </div>
+
+            <div class="col-md-2">
+                <label for="country" class="form-label">Земја</label>
+                <input type="text" id="country" name="country" class="form-control" maxlength="2" style="text-transform: uppercase;"
+                       value="<?= htmlspecialchars($partner->country ?? 'MK') ?>">
+                <div class="form-text">ISO код (MK = домашен)</div>
             </div>
 
             <div class="col-12">

@@ -3,11 +3,14 @@
 namespace Tests;
 
 use App\Core\Database;
-use App\Domain\Accounting\Terk;
-use App\Domain\Accounting\TerkLine;
+use App\Domain\Accounting\VatRate;
+use App\Domain\Invoicing\ProductCategory;
+use App\Domain\Invoicing\Product;
 use App\Repository\AccountRepository;
 use App\Repository\InvoiceRepository;
-use App\Repository\TerkRepository;
+use App\Repository\ProductCategoryRepository;
+use App\Repository\ProductRepository;
+use App\Repository\VatRateRepository;
 use App\Service\InvoiceService;
 use InvalidArgumentException;
 use PDO;
@@ -20,7 +23,11 @@ class InvoiceServiceTest extends TestCase
     private InvoiceRepository $invoices;
     private InvoiceService $service;
     private int $partnerId;
-    private int $terkId;
+    private int $foreignPartnerId;
+    private int $vatStandardId;
+    private int $vatZeroId;
+    private int $categoryId;
+    private int $productId;
     private array $createdInvoiceIds = [];
     private array $createdEntryIds = [];
 
@@ -28,22 +35,35 @@ class InvoiceServiceTest extends TestCase
     {
         $this->db = Database::connection();
         $this->invoices = new InvoiceRepository();
-        $terkRepo = new TerkRepository();
-        $this->service = new InvoiceService($this->invoices, $terkRepo);
+        $this->service = new InvoiceService($this->invoices);
 
-        $stmt = $this->db->prepare("INSERT INTO partners (name, type) VALUES (?, 'customer')");
+        $stmt = $this->db->prepare("INSERT INTO partners (name, type, country) VALUES (?, 'customer', 'MK')");
         $stmt->execute(['Тест партнер ' . uniqid()]);
         $this->partnerId = (int) $this->db->lastInsertId();
 
-        $accounts = new AccountRepository();
-        $receivables = $accounts->findByCode('120');
-        $revenue = $accounts->findByCode('751');
-        $vat = $accounts->findByCode('260');
+        $stmt = $this->db->prepare("INSERT INTO partners (name, type, country) VALUES (?, 'customer', 'DE')");
+        $stmt->execute(['Тест странски партнер ' . uniqid()]);
+        $this->foreignPartnerId = (int) $this->db->lastInsertId();
 
-        $this->terkId = $terkRepo->create(new Terk('Тест терк ' . uniqid()));
-        $terkRepo->insertLine(new TerkLine($receivables->id, 'debit', 'gross', true, 1, $this->terkId));
-        $terkRepo->insertLine(new TerkLine($revenue->id, 'credit', 'net', false, 2, $this->terkId));
-        $terkRepo->insertLine(new TerkLine($vat->id, 'credit', 'vat', false, 3, $this->terkId));
+        $accounts = new AccountRepository();
+        $revenue = $accounts->findByCode('751');
+        $vatPayable = $accounts->findByCode('260');
+
+        $vatRateRepo = new VatRateRepository();
+        $this->vatStandardId = $vatRateRepo->create(new VatRate('Тест стандардна', '18.00', 'standard', $vatPayable->id));
+        $this->vatZeroId = $vatRateRepo->create(new VatRate('Тест нулта', '0.00', 'zero', null));
+
+        $categoryRepo = new ProductCategoryRepository();
+        $this->categoryId = $categoryRepo->create(new ProductCategory(
+            'Тест категорија ' . uniqid(),
+            $revenue->id,
+            $this->vatStandardId,
+            $revenue->id,
+            $this->vatZeroId
+        ));
+
+        $productRepo = new ProductRepository();
+        $this->productId = $productRepo->create(new Product('Тест производ', $this->categoryId, '1000.00'));
     }
 
     protected function tearDown(): void
@@ -56,40 +76,65 @@ class InvoiceServiceTest extends TestCase
             $this->db->prepare('DELETE FROM journal_entries WHERE id = ?')->execute([$id]);
         }
 
-        $this->db->prepare('DELETE FROM terkovi WHERE id = ?')->execute([$this->terkId]);
-        $this->db->prepare('DELETE FROM partners WHERE id = ?')->execute([$this->partnerId]);
+        $this->db->prepare('DELETE FROM products WHERE id = ?')->execute([$this->productId]);
+        $this->db->prepare('DELETE FROM product_categories WHERE id = ?')->execute([$this->categoryId]);
+        $this->db->prepare('DELETE FROM vat_rates WHERE id IN (?, ?)')->execute([$this->vatStandardId, $this->vatZeroId]);
+        $this->db->prepare('DELETE FROM partners WHERE id IN (?, ?)')->execute([$this->partnerId, $this->foreignPartnerId]);
     }
 
-    public function test_it_calculates_totals_from_lines_with_vat(): void
+    public function test_it_resolves_account_and_vat_from_category_for_domestic_partner(): void
     {
-        $invoiceId = $this->service->createInvoice($this->partnerId, null, '2026-01-01', '2026-01-31', [
-            ['description' => 'Услуга А', 'quantity' => '2', 'unit_price' => '1000.00', 'vat_rate' => '18'],
-            ['description' => 'Услуга Б', 'quantity' => '1', 'unit_price' => '500.00', 'vat_rate' => '5'],
+        $invoiceId = $this->service->createInvoice($this->partnerId, '2026-01-01', '2026-01-31', [
+            ['type' => 'product', 'item_id' => $this->productId, 'quantity' => '2'],
         ]);
         $this->createdInvoiceIds[] = $invoiceId;
 
         $invoice = $this->invoices->find($invoiceId);
 
-        // нето: 2*1000 + 1*500 = 2500.00
-        $this->assertSame('2500.00', $invoice->totalNet);
-        // ддв: 2000*0.18 + 500*0.05 = 360 + 25 = 385.00
-        $this->assertSame('385.00', $invoice->totalVat);
-        $this->assertSame('2885.00', $invoice->totalGross);
-        $this->assertSame('draft', $invoice->status);
+        // 2 * 1000 = 2000 нето, 18% ддв = 360
+        $this->assertSame('2000.00', $invoice->totalNet);
+        $this->assertSame('360.00', $invoice->totalVat);
+        $this->assertSame('2360.00', $invoice->totalGross);
+        $this->assertSame($this->vatStandardId, $invoice->lines[0]->vatRateId);
     }
 
-    public function test_issuing_generates_a_balanced_journal_entry_from_the_chosen_terk(): void
+    public function test_it_resolves_foreign_context_for_foreign_partner(): void
     {
-        $invoiceId = $this->service->createInvoice($this->partnerId, null, '2026-01-01', '2026-01-31', [
-            ['description' => 'Услуга', 'quantity' => '1', 'unit_price' => '1000.00', 'vat_rate' => '18'],
+        $invoiceId = $this->service->createInvoice($this->foreignPartnerId, '2026-01-01', '2026-01-31', [
+            ['type' => 'product', 'item_id' => $this->productId, 'quantity' => '1'],
         ]);
         $this->createdInvoiceIds[] = $invoiceId;
 
-        $this->service->issue($invoiceId, $this->terkId);
+        $invoice = $this->invoices->find($invoiceId);
+
+        // странски контекст → нулта ДДВ стапка од категоријата
+        $this->assertSame($this->vatZeroId, $invoice->lines[0]->vatRateId);
+        $this->assertSame('0.00', $invoice->totalVat);
+    }
+
+    public function test_unit_price_defaults_to_product_price_when_not_overridden(): void
+    {
+        $invoiceId = $this->service->createInvoice($this->partnerId, '2026-01-01', '2026-01-31', [
+            ['type' => 'product', 'item_id' => $this->productId, 'quantity' => '3'],
+        ]);
+        $this->createdInvoiceIds[] = $invoiceId;
+
+        $invoice = $this->invoices->find($invoiceId);
+
+        $this->assertSame('1000.00', $invoice->lines[0]->unitPrice);
+    }
+
+    public function test_issuing_generates_a_balanced_journal_entry(): void
+    {
+        $invoiceId = $this->service->createInvoice($this->partnerId, '2026-01-01', '2026-01-31', [
+            ['type' => 'product', 'item_id' => $this->productId, 'quantity' => '1'],
+        ]);
+        $this->createdInvoiceIds[] = $invoiceId;
+
+        $this->service->issue($invoiceId);
 
         $invoice = $this->invoices->find($invoiceId);
         $this->assertSame('issued', $invoice->status);
-        $this->assertSame($this->terkId, $invoice->terkId);
         $this->assertNotNull($invoice->journalEntryId);
         $this->createdEntryIds[] = $invoice->journalEntryId;
 
@@ -102,7 +147,7 @@ class InvoiceServiceTest extends TestCase
         $this->assertEquals(1180.00, (float) $sums['d']);
         $this->assertEquals(1180.00, (float) $sums['c']);
 
-        // Линијата со tag_partner=1 во теркот (побарувања) мора да е таговирана со партнерот
+        // Побарувањата (дебит редот) мора да се таговирани со партнерот
         $stmt = $this->db->prepare(
             'SELECT COUNT(*) FROM journal_lines WHERE journal_entry_id = ? AND partner_id = ?'
         );
@@ -110,44 +155,44 @@ class InvoiceServiceTest extends TestCase
         $this->assertSame(1, (int) $stmt->fetchColumn());
     }
 
-    public function test_zero_vat_line_is_skipped_when_posting(): void
+    public function test_lines_with_same_resolved_account_are_grouped_on_posting(): void
     {
-        $invoiceId = $this->service->createInvoice($this->partnerId, null, '2026-01-01', '2026-01-31', [
-            ['description' => 'Услуга без ДДВ', 'quantity' => '1', 'unit_price' => '500.00', 'vat_rate' => '0'],
+        $invoiceId = $this->service->createInvoice($this->partnerId, '2026-01-01', '2026-01-31', [
+            ['type' => 'product', 'item_id' => $this->productId, 'quantity' => '1'],
+            ['type' => 'product', 'item_id' => $this->productId, 'quantity' => '1'],
         ]);
         $this->createdInvoiceIds[] = $invoiceId;
 
-        $this->service->issue($invoiceId, $this->terkId);
+        $this->service->issue($invoiceId);
 
         $invoice = $this->invoices->find($invoiceId);
         $this->createdEntryIds[] = $invoice->journalEntryId;
 
+        // 1 дебит (побарувања) + 1 кредит (иста приходна сметка, групирано) + 1 кредит (ддв) = 3 редови, не 4+
         $stmt = $this->db->prepare('SELECT COUNT(*) FROM journal_lines WHERE journal_entry_id = ?');
         $stmt->execute([$invoice->journalEntryId]);
-
-        // само 2 ставки (побарувања + приходи), ддв ставката е прескокната бидејќи е 0
-        $this->assertSame(2, (int) $stmt->fetchColumn());
+        $this->assertSame(3, (int) $stmt->fetchColumn());
     }
 
     public function test_it_cannot_issue_the_same_invoice_twice(): void
     {
-        $invoiceId = $this->service->createInvoice($this->partnerId, null, '2026-01-01', '2026-01-31', [
-            ['description' => 'Услуга', 'quantity' => '1', 'unit_price' => '100.00', 'vat_rate' => '0'],
+        $invoiceId = $this->service->createInvoice($this->partnerId, '2026-01-01', '2026-01-31', [
+            ['type' => 'product', 'item_id' => $this->productId, 'quantity' => '1'],
         ]);
         $this->createdInvoiceIds[] = $invoiceId;
 
-        $this->service->issue($invoiceId, $this->terkId);
+        $this->service->issue($invoiceId);
         $invoice = $this->invoices->find($invoiceId);
         $this->createdEntryIds[] = $invoice->journalEntryId;
 
         $this->expectException(RuntimeException::class);
-        $this->service->issue($invoiceId, $this->terkId);
+        $this->service->issue($invoiceId);
     }
 
     public function test_it_requires_at_least_one_line(): void
     {
         $this->expectException(InvalidArgumentException::class);
 
-        $this->service->createInvoice($this->partnerId, null, '2026-01-01', '2026-01-31', []);
+        $this->service->createInvoice($this->partnerId, '2026-01-01', '2026-01-31', []);
     }
 }

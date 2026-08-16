@@ -7,8 +7,11 @@ use App\Http\Controllers\JournalController;
 use App\Http\Controllers\PartnerController;
 use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\ReportController;
-use App\Http\Controllers\TerkController;
-use App\Http\Controllers\NalogController;
+use App\Http\Controllers\VatRateController;
+use App\Http\Controllers\ProductCategoryController;
+use App\Http\Controllers\ProductController;
+use App\Http\Controllers\ServiceCategoryController;
+use App\Http\Controllers\ServiceController;
 
 $router = new Router();
 
@@ -48,18 +51,39 @@ $router->get('/reports/trial-balance', [ReportController::class, 'trialBalance']
 $router->get('/reports/vat', [ReportController::class, 'vat']);
 $router->get('/reports/open-items', [ReportController::class, 'openItems']);
 
-$router->get('/terkovi', [TerkController::class, 'index']);
-$router->get('/terkovi/create', [TerkController::class, 'create']);
-$router->post('/terkovi', [TerkController::class, 'store']);
-$router->get('/terkovi/{id}/edit', [TerkController::class, 'edit']);
-$router->post('/terkovi/{id}', [TerkController::class, 'update']);
-$router->post('/terkovi/{id}/delete', [TerkController::class, 'destroy']);
+$router->get('/vat-rates', [VatRateController::class, 'index']);
+$router->get('/vat-rates/create', [VatRateController::class, 'create']);
+$router->post('/vat-rates', [VatRateController::class, 'store']);
+$router->get('/vat-rates/{id}/edit', [VatRateController::class, 'edit']);
+$router->post('/vat-rates/{id}', [VatRateController::class, 'update']);
+$router->post('/vat-rates/{id}/delete', [VatRateController::class, 'destroy']);
 
-$router->get('/nalozi', [NalogController::class, 'index']);
-$router->get('/nalozi/create', [NalogController::class, 'create']);
-$router->post('/nalozi', [NalogController::class, 'store']);
-$router->get('/nalozi/{id}/edit', [NalogController::class, 'edit']);
-$router->post('/nalozi/{id}', [NalogController::class, 'update']);
-$router->post('/nalozi/{id}/delete', [NalogController::class, 'destroy']);
+$router->get('/product-categories', [ProductCategoryController::class, 'index']);
+$router->get('/product-categories/create', [ProductCategoryController::class, 'create']);
+$router->post('/product-categories', [ProductCategoryController::class, 'store']);
+$router->get('/product-categories/{id}/edit', [ProductCategoryController::class, 'edit']);
+$router->post('/product-categories/{id}', [ProductCategoryController::class, 'update']);
+$router->post('/product-categories/{id}/delete', [ProductCategoryController::class, 'destroy']);
+
+$router->get('/products', [ProductController::class, 'index']);
+$router->get('/products/create', [ProductController::class, 'create']);
+$router->post('/products', [ProductController::class, 'store']);
+$router->get('/products/{id}/edit', [ProductController::class, 'edit']);
+$router->post('/products/{id}', [ProductController::class, 'update']);
+$router->post('/products/{id}/delete', [ProductController::class, 'destroy']);
+
+$router->get('/service-categories', [ServiceCategoryController::class, 'index']);
+$router->get('/service-categories/create', [ServiceCategoryController::class, 'create']);
+$router->post('/service-categories', [ServiceCategoryController::class, 'store']);
+$router->get('/service-categories/{id}/edit', [ServiceCategoryController::class, 'edit']);
+$router->post('/service-categories/{id}', [ServiceCategoryController::class, 'update']);
+$router->post('/service-categories/{id}/delete', [ServiceCategoryController::class, 'destroy']);
+
+$router->get('/services', [ServiceController::class, 'index']);
+$router->get('/services/create', [ServiceController::class, 'create']);
+$router->post('/services', [ServiceController::class, 'store']);
+$router->get('/services/{id}/edit', [ServiceController::class, 'edit']);
+$router->post('/services/{id}', [ServiceController::class, 'update']);
+$router->post('/services/{id}/delete', [ServiceController::class, 'destroy']);
 
 return $router;

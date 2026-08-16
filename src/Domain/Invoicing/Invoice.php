@@ -15,8 +15,6 @@ class Invoice
 
     public ?int $id;
     public int $partnerId;
-    public ?int $nalogId;
-    public ?int $terkId;
     public string $number;
     public string $date;
     public string $dueDate;
@@ -31,7 +29,6 @@ class Invoice
 
     public function __construct(
         int $partnerId,
-        ?int $nalogId,
         string $number,
         string $date,
         string $dueDate,
@@ -40,13 +37,10 @@ class Invoice
         string $totalVat = '0.00',
         string $totalGross = '0.00',
         ?int $journalEntryId = null,
-        ?int $terkId = null,
         ?int $id = null
     ) {
         $this->id = $id;
         $this->partnerId = $partnerId;
-        $this->nalogId = $nalogId;
-        $this->terkId = $terkId;
         $this->number = $number;
         $this->date = $date;
         $this->dueDate = $dueDate;
@@ -61,7 +55,6 @@ class Invoice
     {
         return new self(
             (int) $row['partner_id'],
-            $row['nalog_id'] !== null ? (int) $row['nalog_id'] : null,
             $row['number'],
             $row['invoice_date'],
             $row['due_date'],
@@ -70,7 +63,6 @@ class Invoice
             $row['total_vat'],
             $row['total_gross'],
             $row['journal_entry_id'] !== null ? (int) $row['journal_entry_id'] : null,
-            $row['terk_id'] !== null ? (int) $row['terk_id'] : null,
             (int) $row['id']
         );
     }
