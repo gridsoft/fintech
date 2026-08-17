@@ -1,0 +1,49 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(**)",
+      "Grep(**)",
+      "Glob(**)",
+      "Bash(php *)",
+      "Bash(composer install)",
+      "Bash(composer lint*)",
+      "Bash(composer test*)",
+      "Bash(git status)",
+      "Bash(git diff*)",
+      "Bash(git add*)",
+      "Bash(git log*)",
+      "Edit(**)"
+    ],
+    "ask": [
+      "Bash(git push*)",
+      "Bash(composer require*)",
+      "Bash(composer update*)",
+      "Bash(gh *)"
+    ],
+    "deny": [
+      "Bash(npm *)",
+      "Bash(yarn *)",
+      "Bash(rm -rf*)",
+      "Bash(git push --force*)",
+      "Bash(git reset --hard*)",
+      "Bash(*DROP TABLE*)",
+      "Read(.env)",
+      "Read(**/.env)",
+      "Write(.env)",
+      "Write(**/.env)",
+      "Write(vendor/**)",
+      "Write(.git/**)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          { "type": "command", "command": "node .claude/hooks/guard.mjs" }
+        ]
+      }
+    ]
+  },
+  "extraKnownMarketplaces": {}
+}

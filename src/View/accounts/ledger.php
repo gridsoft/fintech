@@ -4,7 +4,7 @@
 
 <div class="card">
     <div class="table-responsive">
-        <table class="table align-middle mb-0">
+        <table class="table align-middle mb-0 data-table">
             <thead class="table-light">
                 <tr>
                     <th>Датум</th>
@@ -12,7 +12,7 @@
                     <th>Референца</th>
                     <th class="text-end">Дебит</th>
                     <th class="text-end">Кредит</th>
-                    <th class="text-end">Салдо</th>
+                    <th class="text-end" data-no-filter>Салдо</th>
                 </tr>
             </thead>
             <tbody>

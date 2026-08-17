@@ -12,6 +12,9 @@ use App\Http\Controllers\ProductCategoryController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ServiceCategoryController;
 use App\Http\Controllers\ServiceController;
+use App\Http\Controllers\ExpenseCategoryController;
+use App\Http\Controllers\PurchaseInvoiceController;
+use App\Http\Controllers\BankStatementController;
 
 $router = new Router();
 
@@ -37,6 +40,10 @@ $router->get('/partners/{id}/edit', [PartnerController::class, 'edit']);
 $router->post('/partners/{id}', [PartnerController::class, 'update']);
 $router->post('/partners/{id}/delete', [PartnerController::class, 'destroy']);
 $router->get('/partners/{id}/statement', [PartnerController::class, 'statement']);
+$router->post('/partners/{id}/employees', [PartnerController::class, 'addEmployee']);
+$router->post('/partners/{id}/employees/{employeeId}/delete', [PartnerController::class, 'deleteEmployee']);
+$router->post('/partners/{id}/custom-fields', [PartnerController::class, 'addCustomField']);
+$router->post('/partners/{id}/custom-fields/{fieldId}/delete', [PartnerController::class, 'deleteCustomField']);
 
 $router->get('/invoices', [InvoiceController::class, 'index']);
 $router->get('/invoices/create', [InvoiceController::class, 'create']);
@@ -45,6 +52,28 @@ $router->get('/invoices/{id}', [InvoiceController::class, 'show']);
 $router->post('/invoices/{id}/issue', [InvoiceController::class, 'issue']);
 $router->post('/invoices/{id}/mark-paid', [InvoiceController::class, 'markPaid']);
 $router->post('/invoices/{id}/cancel', [InvoiceController::class, 'cancel']);
+
+$router->get('/purchase-invoices', [PurchaseInvoiceController::class, 'index']);
+$router->get('/purchase-invoices/create', [PurchaseInvoiceController::class, 'create']);
+$router->post('/purchase-invoices', [PurchaseInvoiceController::class, 'store']);
+$router->get('/purchase-invoices/{id}', [PurchaseInvoiceController::class, 'show']);
+$router->post('/purchase-invoices/{id}/post', [PurchaseInvoiceController::class, 'post']);
+$router->post('/purchase-invoices/{id}/mark-paid', [PurchaseInvoiceController::class, 'markPaid']);
+$router->post('/purchase-invoices/{id}/cancel', [PurchaseInvoiceController::class, 'cancel']);
+
+$router->get('/expense-categories', [ExpenseCategoryController::class, 'index']);
+$router->get('/expense-categories/create', [ExpenseCategoryController::class, 'create']);
+$router->post('/expense-categories', [ExpenseCategoryController::class, 'store']);
+$router->get('/expense-categories/{id}/edit', [ExpenseCategoryController::class, 'edit']);
+$router->post('/expense-categories/{id}', [ExpenseCategoryController::class, 'update']);
+$router->post('/expense-categories/{id}/delete', [ExpenseCategoryController::class, 'destroy']);
+
+$router->get('/bank-statements', [BankStatementController::class, 'index']);
+$router->get('/bank-statements/create', [BankStatementController::class, 'create']);
+$router->post('/bank-statements', [BankStatementController::class, 'store']);
+$router->get('/bank-statements/{id}', [BankStatementController::class, 'show']);
+$router->post('/bank-statements/{id}/transactions', [BankStatementController::class, 'addTransaction']);
+$router->post('/bank-transactions/{id}/match', [BankStatementController::class, 'match']);
 
 $router->get('/reports', [ReportController::class, 'index']);
 $router->get('/reports/trial-balance', [ReportController::class, 'trialBalance']);

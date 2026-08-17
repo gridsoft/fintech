@@ -5,18 +5,23 @@ namespace App\Http\Controllers;
 use App\Core\Request;
 use App\Core\Response;
 use App\Domain\Partners\Partner;
+use App\Domain\Partners\PartnerEmployee;
 use App\Repository\JournalRepository;
 use App\Repository\PartnerRepository;
+use App\Service\PartnerService;
+use InvalidArgumentException;
 
 class PartnerController
 {
     private PartnerRepository $partners;
     private JournalRepository $journal;
+    private PartnerService $service;
 
     public function __construct()
     {
         $this->partners = new PartnerRepository();
         $this->journal = new JournalRepository();
+        $this->service = new PartnerService($this->partners);
     }
 
     public function index(Request $request): void
@@ -36,6 +41,10 @@ class PartnerController
             'activeNav' => 'partners',
             'breadcrumb' => ['Почетна' => '/', 'Партнери' => '/partners', 'Нов партнер'],
             'partner' => null,
+            'employees' => [],
+            'customFields' => [],
+            'oldEmployees' => [],
+            'oldCustomFields' => [],
             'errors' => [],
         ]);
     }
@@ -43,31 +52,31 @@ class PartnerController
     public function store(Request $request): void
     {
         $errors = $this->validate($request);
+        $employeeRows = $this->collectEmployeeRows($request);
+        $customFieldRows = $this->collectCustomFieldRows($request);
 
-        if ($errors) {
-            Response::view('partners/form', [
-                'pageTitle' => 'Нов партнер',
-                'activeNav' => 'partners',
-                'breadcrumb' => ['Почетна' => '/', 'Партнери' => '/partners', 'Нов партнер'],
-                'partner' => null,
-                'errors' => $errors,
-            ]);
+        if (!$errors) {
+            $partnerId = $this->service->createPartner(
+                $this->partnerFromRequest($request),
+                $employeeRows,
+                $customFieldRows
+            );
+
+            Response::redirect("/partners/$partnerId/edit");
             return;
         }
 
-        $partner = new Partner(
-            trim($request->input('name')),
-            $request->input('type'),
-            trim((string) $request->input('tax_number')) ?: null,
-            trim((string) $request->input('address')) ?: null,
-            trim((string) $request->input('contact')) ?: null,
-            strtoupper(trim((string) $request->input('country'))) ?: 'MK',
-            $request->input('is_active') === '1'
-        );
-
-        $this->partners->create($partner);
-
-        Response::redirect('/partners');
+        Response::view('partners/form', [
+            'pageTitle' => 'Нов партнер',
+            'activeNav' => 'partners',
+            'breadcrumb' => ['Почетна' => '/', 'Партнери' => '/partners', 'Нов партнер'],
+            'partner' => null,
+            'employees' => [],
+            'customFields' => [],
+            'oldEmployees' => $employeeRows,
+            'oldCustomFields' => $customFieldRows,
+            'errors' => $errors,
+        ]);
     }
 
     public function edit(Request $request, string $id): void
@@ -84,6 +93,8 @@ class PartnerController
             'activeNav' => 'partners',
             'breadcrumb' => ['Почетна' => '/', 'Партнери' => '/partners', 'Уреди партнер'],
             'partner' => $partner,
+            'employees' => $this->partners->employeesFor($partner->id),
+            'customFields' => $this->partners->customFieldsFor($partner->id),
             'errors' => [],
         ]);
     }
@@ -105,28 +116,72 @@ class PartnerController
                 'activeNav' => 'partners',
                 'breadcrumb' => ['Почетна' => '/', 'Партнери' => '/partners', 'Уреди партнер'],
                 'partner' => $partner,
+                'employees' => $this->partners->employeesFor($partner->id),
+                'customFields' => $this->partners->customFieldsFor($partner->id),
                 'errors' => $errors,
             ]);
             return;
         }
 
-        $partner->name = trim($request->input('name'));
-        $partner->type = $request->input('type');
-        $partner->taxNumber = trim((string) $request->input('tax_number')) ?: null;
-        $partner->address = trim((string) $request->input('address')) ?: null;
-        $partner->contact = trim((string) $request->input('contact')) ?: null;
-        $partner->country = strtoupper(trim((string) $request->input('country'))) ?: 'MK';
-        $partner->isActive = $request->input('is_active') === '1';
+        $updated = $this->partnerFromRequest($request, $partner->id);
+        $this->partners->update($updated);
 
-        $this->partners->update($partner);
-
-        Response::redirect('/partners');
+        Response::redirect("/partners/{$partner->id}/edit");
     }
 
     public function destroy(Request $request, string $id): void
     {
         $this->partners->delete((int) $id);
         Response::redirect('/partners');
+    }
+
+    public function addEmployee(Request $request, string $id): void
+    {
+        $partnerId = (int) $id;
+        $name = trim((string) $request->input('name'));
+
+        if ($name === '') {
+            Response::html('<h1>Грешка</h1><p>Името е задолжително.</p><p><a href="/partners/' . $partnerId . '/edit">Назад</a></p>', 422);
+            return;
+        }
+
+        $this->partners->addEmployee(new PartnerEmployee(
+            $partnerId,
+            $name,
+            trim((string) $request->input('job_title')) ?: null,
+            trim((string) $request->input('phone')) ?: null,
+            trim((string) $request->input('email')) ?: null
+        ));
+
+        Response::redirect("/partners/$partnerId/edit");
+    }
+
+    public function deleteEmployee(Request $request, string $id, string $employeeId): void
+    {
+        $this->partners->deleteEmployee((int) $employeeId, (int) $id);
+        Response::redirect("/partners/$id/edit");
+    }
+
+    public function addCustomField(Request $request, string $id): void
+    {
+        $partnerId = (int) $id;
+        $key = trim((string) $request->input('field_key'));
+        $value = trim((string) $request->input('field_value'));
+
+        if ($key === '') {
+            Response::html('<h1>Грешка</h1><p>Називот на полето е задолжителен.</p><p><a href="/partners/' . $partnerId . '/edit">Назад</a></p>', 422);
+            return;
+        }
+
+        $this->partners->setCustomField($partnerId, $key, $value !== '' ? $value : null);
+
+        Response::redirect("/partners/$partnerId/edit");
+    }
+
+    public function deleteCustomField(Request $request, string $id, string $fieldId): void
+    {
+        $this->partners->deleteCustomField((int) $fieldId, (int) $id);
+        Response::redirect("/partners/$id/edit");
     }
 
     public function statement(Request $request, string $id): void
@@ -163,6 +218,89 @@ class PartnerController
             'rows' => $rows,
             'closingBalance' => $balance,
         ]);
+    }
+
+    /** @return array<int, array{name: string, job_title: ?string, phone: ?string, email: ?string}> */
+    private function collectEmployeeRows(Request $request): array
+    {
+        $names = $request->input('employee_name', []);
+        $jobTitles = $request->input('employee_job_title', []);
+        $phones = $request->input('employee_phone', []);
+        $emails = $request->input('employee_email', []);
+
+        $rows = [];
+        foreach ($names as $i => $name) {
+            $name = trim((string) $name);
+
+            if ($name === '') {
+                continue;
+            }
+
+            $rows[] = [
+                'name' => $name,
+                'job_title' => trim((string) ($jobTitles[$i] ?? '')) ?: null,
+                'phone' => trim((string) ($phones[$i] ?? '')) ?: null,
+                'email' => trim((string) ($emails[$i] ?? '')) ?: null,
+            ];
+        }
+
+        return $rows;
+    }
+
+    /** @return array<int, array{key: string, value: ?string}> */
+    private function collectCustomFieldRows(Request $request): array
+    {
+        $keys = $request->input('custom_field_key', []);
+        $values = $request->input('custom_field_value', []);
+
+        $rows = [];
+        foreach ($keys as $i => $key) {
+            $key = trim((string) $key);
+
+            if ($key === '') {
+                continue;
+            }
+
+            $rows[] = [
+                'key' => $key,
+                'value' => trim((string) ($values[$i] ?? '')) ?: null,
+            ];
+        }
+
+        return $rows;
+    }
+
+    private function partnerFromRequest(Request $request, ?int $id = null): Partner
+    {
+        return new Partner(
+            trim($request->input('name')),
+            $request->input('type'),
+            $this->nullableInput($request, 'tax_number'),
+            $this->nullableInput($request, 'address_line1'),
+            $this->nullableInput($request, 'address_line2'),
+            $this->nullableInput($request, 'postal_code'),
+            $this->nullableInput($request, 'city'),
+            strtoupper(trim((string) $request->input('country'))) ?: 'MK',
+            $this->nullableInput($request, 'phone'),
+            $this->nullableInput($request, 'fax'),
+            $this->nullableInput($request, 'mobile'),
+            $this->nullableInput($request, 'email'),
+            $this->nullableInput($request, 'website'),
+            $this->nullableInput($request, 'bank_account'),
+            $this->nullableInput($request, 'vat_number'),
+            $this->nullableInput($request, 'iban'),
+            $this->nullableInput($request, 'swift'),
+            $this->nullableInput($request, 'timocom_id'),
+            $request->input('is_active') === '1',
+            $id
+        );
+    }
+
+    private function nullableInput(Request $request, string $key): ?string
+    {
+        $value = trim((string) $request->input($key));
+
+        return $value !== '' ? $value : null;
     }
 
     private function validate(Request $request): array

@@ -29,6 +29,7 @@ class VatRate
     public string $rate;
     public string $type;
     public ?int $payableAccountId;
+    public ?int $receivableAccountId;
     public bool $isActive;
 
     public function __construct(
@@ -36,6 +37,7 @@ class VatRate
         string $rate,
         string $type,
         ?int $payableAccountId = null,
+        ?int $receivableAccountId = null,
         bool $isActive = true,
         ?int $id = null
     ) {
@@ -44,6 +46,7 @@ class VatRate
         $this->rate = $rate;
         $this->type = $type;
         $this->payableAccountId = $payableAccountId;
+        $this->receivableAccountId = $receivableAccountId;
         $this->isActive = $isActive;
     }
 
@@ -54,6 +57,7 @@ class VatRate
             $row['rate'],
             $row['type'],
             $row['payable_account_id'] !== null ? (int) $row['payable_account_id'] : null,
+            $row['receivable_account_id'] !== null ? (int) $row['receivable_account_id'] : null,
             (bool) $row['is_active'],
             (int) $row['id']
         );

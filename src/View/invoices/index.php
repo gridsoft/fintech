@@ -1,12 +1,12 @@
-<div class="d-flex justify-content-end mb-3">
-    <a href="/invoices/create" class="btn btn-primary">
-        <i class="bi bi-plus-lg"></i> Нова фактура
-    </a>
-</div>
+<?php ob_start(); ?>
+<a href="/invoices/create" class="btn btn-primary">
+    <i class="bi bi-plus-lg"></i> Нова фактура
+</a>
+<?php $headerActions = ob_get_clean(); ?>
 
 <div class="card">
     <div class="table-responsive">
-        <table class="table table-hover align-middle mb-0">
+        <table class="table table-hover align-middle mb-0 data-table">
             <thead class="table-light">
                 <tr>
                     <th>Број</th>

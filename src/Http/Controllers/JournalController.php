@@ -29,9 +29,9 @@ class JournalController
     public function index(Request $request): void
     {
         Response::view('journal/index', [
-            'pageTitle' => 'Дневник',
+            'pageTitle' => 'Главна книга',
             'activeNav' => 'journal',
-            'breadcrumb' => ['Почетна' => '/', 'Дневник'],
+            'breadcrumb' => ['Почетна' => '/', 'Главна книга'],
             'entries' => $this->journal->allWithTotals(),
         ]);
     }
@@ -48,7 +48,7 @@ class JournalController
         Response::view('journal/show', [
             'pageTitle' => 'Преглед на запис',
             'activeNav' => 'journal',
-            'breadcrumb' => ['Почетна' => '/', 'Дневник' => '/journal', 'Преглед'],
+            'breadcrumb' => ['Почетна' => '/', 'Главна книга' => '/journal', 'Преглед'],
             'entry' => $entry,
             'accountsById' => $this->accountsById(),
             'partnersById' => $this->partnersById(),
@@ -60,7 +60,7 @@ class JournalController
         Response::view('journal/form', [
             'pageTitle' => 'Нов запис',
             'activeNav' => 'journal',
-            'breadcrumb' => ['Почетна' => '/', 'Дневник' => '/journal', 'Нов запис'],
+            'breadcrumb' => ['Почетна' => '/', 'Главна книга' => '/journal', 'Нов запис'],
             'accounts' => $this->accounts->all(),
             'partners' => $this->partners->all(),
             'errors' => [],
@@ -106,7 +106,7 @@ class JournalController
         Response::view('journal/form', [
             'pageTitle' => 'Нов запис',
             'activeNav' => 'journal',
-            'breadcrumb' => ['Почетна' => '/', 'Дневник' => '/journal', 'Нов запис'],
+            'breadcrumb' => ['Почетна' => '/', 'Главна книга' => '/journal', 'Нов запис'],
             'accounts' => $this->accounts->all(),
             'partners' => $this->partners->all(),
             'errors' => $errors,

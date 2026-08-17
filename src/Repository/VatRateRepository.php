@@ -43,13 +43,14 @@ class VatRateRepository
     public function create(VatRate $vatRate): int
     {
         $stmt = $this->db->prepare(
-            'INSERT INTO vat_rates (name, rate, type, payable_account_id, is_active) VALUES (?, ?, ?, ?, ?)'
+            'INSERT INTO vat_rates (name, rate, type, payable_account_id, receivable_account_id, is_active) VALUES (?, ?, ?, ?, ?, ?)'
         );
         $stmt->execute([
             $vatRate->name,
             $vatRate->rate,
             $vatRate->type,
             $vatRate->payableAccountId,
+            $vatRate->receivableAccountId,
             $vatRate->isActive ? 1 : 0,
         ]);
 
@@ -59,13 +60,14 @@ class VatRateRepository
     public function update(VatRate $vatRate): void
     {
         $stmt = $this->db->prepare(
-            'UPDATE vat_rates SET name = ?, rate = ?, type = ?, payable_account_id = ?, is_active = ? WHERE id = ?'
+            'UPDATE vat_rates SET name = ?, rate = ?, type = ?, payable_account_id = ?, receivable_account_id = ?, is_active = ? WHERE id = ?'
         );
         $stmt->execute([
             $vatRate->name,
             $vatRate->rate,
             $vatRate->type,
             $vatRate->payableAccountId,
+            $vatRate->receivableAccountId,
             $vatRate->isActive ? 1 : 0,
             $vatRate->id,
         ]);
@@ -83,9 +85,10 @@ class VatRateRepository
             'SELECT
                 (SELECT COUNT(*) FROM product_categories WHERE domestic_vat_rate_id = ? OR foreign_vat_rate_id = ?) +
                 (SELECT COUNT(*) FROM service_categories WHERE domestic_vat_rate_id = ? OR foreign_vat_rate_id = ?) +
-                (SELECT COUNT(*) FROM invoice_lines WHERE vat_rate_id = ?)'
+                (SELECT COUNT(*) FROM invoice_lines WHERE vat_rate_id = ?) +
+                (SELECT COUNT(*) FROM purchase_invoice_lines WHERE vat_rate_id = ?)'
         );
-        $stmt->execute([$id, $id, $id, $id, $id]);
+        $stmt->execute([$id, $id, $id, $id, $id, $id]);
 
         return (int) $stmt->fetchColumn() > 0;
     }

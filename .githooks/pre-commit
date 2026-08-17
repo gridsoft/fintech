@@ -1,0 +1,15 @@
+#!/usr/bin/env sh
+set -e
+
+echo "→ Scanning staged changes for secrets (gitleaks)..."
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "✗ gitleaks not installed — this is the only secret-scan gate, so it's a hard fail."
+  echo "  Install: brew install gitleaks / winget install gitleaks / release binary."
+  exit 1
+fi
+gitleaks protect --staged --redact
+
+echo "→ Linting staged PHP files (php-cs-fixer, dry-run)..."
+composer lint
+
+echo "✓ pre-commit checks passed."

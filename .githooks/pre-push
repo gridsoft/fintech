@@ -1,0 +1,10 @@
+#!/usr/bin/env sh
+set -e
+
+if [ -f composer.json ] && grep -q '"test"' composer.json; then
+  echo "→ Running tests before push (composer test)..."
+  composer test
+  echo "✓ pre-push checks passed."
+else
+  echo "→ No test script wired yet — skipping (see TESTING.md)."
+fi

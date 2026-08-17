@@ -30,7 +30,7 @@
             </div>
 
             <div class="col-md-8">
-                <label for="payable_account_id" class="form-label">Сметка за обврска за ДДВ</label>
+                <label for="payable_account_id" class="form-label">Сметка за обврска за ДДВ (излезен)</label>
                 <select id="payable_account_id" name="payable_account_id" class="form-select">
                     <option value="">— нема (0%/ослободено) —</option>
                     <?php foreach ($accounts as $account): ?>
@@ -39,7 +39,20 @@
                         </option>
                     <?php endforeach; ?>
                 </select>
-                <div class="form-text">На оваа сметка се книжи собраниот ДДВ при издавање фактура со оваа стапка.</div>
+                <div class="form-text">На оваа сметка се книжи собраниот ДДВ при издавање (продажна) фактура со оваа стапка.</div>
+            </div>
+
+            <div class="col-md-8">
+                <label for="receivable_account_id" class="form-label">Сметка за побарување за ДДВ (влезен, одбивен)</label>
+                <select id="receivable_account_id" name="receivable_account_id" class="form-select">
+                    <option value="">— нема (0%/неодбивно) —</option>
+                    <?php foreach ($accounts as $account): ?>
+                        <option value="<?= $account->id ?>" <?= (int) ($vatRate->receivableAccountId ?? 0) === $account->id ? 'selected' : '' ?>>
+                            <?= htmlspecialchars($account->code . ' — ' . $account->name) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+                <div class="form-text">На оваа сметка се книжи одбивниот влезен ДДВ при заведување влезна фактура со оваа стапка.</div>
             </div>
 
             <div class="col-12">

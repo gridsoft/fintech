@@ -24,6 +24,15 @@ class InvoiceRepository
         return array_map([Invoice::class, 'fromRow'], $stmt->fetchAll());
     }
 
+    /** Издадени фактури на еден партнер, сè уште не целосно платени — единствените што можат да се поврзат со уплата. */
+    public function openForMatchingByPartner(int $partnerId): array
+    {
+        $stmt = $this->db->prepare("SELECT * FROM invoices WHERE status = 'issued' AND partner_id = ? ORDER BY invoice_date ASC, id ASC");
+        $stmt->execute([$partnerId]);
+
+        return array_map([Invoice::class, 'fromRow'], $stmt->fetchAll());
+    }
+
     public function find(int $id): ?Invoice
     {
         $stmt = $this->db->prepare('SELECT * FROM invoices WHERE id = ?');

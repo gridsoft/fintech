@@ -138,12 +138,14 @@ expense_categories: id, name,
 
 Given the core double-entry engine and basic invoicing already exist, extend in this order:
 
-1. Add `type` to `vat_rates`, extend `product_categories`/`service_categories`/`expense_categories` with the account-mapping columns from sections 1–2 and 5 above (migration + repository updates).
-2. Rework the invoice-posting service to use the context-resolution + group-by-account algorithm from section 3 (both sales and purchase sides).
-3. Add reverse-charge posting path for purchases where `expense_category.reverse_charge_applicable = true`.
-4. Add fixed-asset posting path for `is_capitalizable` categories (account only for now; depreciation schedule can be a stub/TODO).
+1. ✅ Add `type` to `vat_rates`, extend `product_categories`/`service_categories`/`expense_categories` with the account-mapping columns from sections 1–2 and 5 above (migration + repository updates).
+2. ✅ Rework the invoice-posting service to use the context-resolution + group-by-account algorithm from section 3 (both sales and purchase sides). Purchase side: `PurchaseInvoiceService`, account resolved from `expense_categories` + domestic/foreign context (like sales), but the VAT rate is entered manually per line instead of resolved — it's whatever the supplier printed on the received invoice, not something this company controls. `vat_rates` got a `receivable_account_id` column (mirrors `payable_account_id`, but for deductible input VAT) and AP posts to new analytic sub-accounts `2200`/`2201` (mirroring the `1200`/`1201` receivables pattern). `vat_deductible = 'none'` folds the VAT into the expense line instead of splitting it to a receivable account.
+3. Add reverse-charge posting path for purchases where `expense_category.reverse_charge_applicable = true`. **Guarded, not built**: `PurchaseInvoiceService::createPurchaseInvoice()` throws if a line's category has this flag set, so a category can be configured ahead of time without silently mis-posting until this step lands.
+4. Add fixed-asset posting path for `is_capitalizable` categories (account only for now; depreciation schedule can be a stub/TODO). **Guarded, not built** — same reasoning as step 3.
 5. Add `advance_invoices` and `credit_notes` as their own tables/flows, each with their own posting logic, linked to the original invoice/partner.
 6. Add `exchange_rate` to invoices + FX gain/loss posting on settlement in the payment-matching step.
-7. Update reporting queries (trial balance, VAT ledger) to respect `vat_rates.type` for correct grouping.
+7. Update reporting queries (trial balance, VAT ledger) to respect `vat_rates.type` for correct grouping. Note: `ReportService::vatSummary()` already reads `vat_rates`-linked accounts `260`/`160` generically, so it picked up purchase-side input VAT with no changes needed once step 2 landed.
+
+Also not yet built: `vat_deductible = 'partial'` has no stored split ratio in the schema, so `createPurchaseInvoice()` guards against it the same way as steps 3/4 — add the ratio column and the split logic when a real category needs it.
 
 Each step should ship with its own migration + repository + service + a manual test invoice before moving to the next.

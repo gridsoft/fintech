@@ -13,20 +13,24 @@ require __DIR__ . '/../vendor/autoload.php';
 
 use App\Core\Database;
 use App\Domain\Accounting\VatRate;
+use App\Domain\Invoicing\ExpenseCategory;
 use App\Domain\Invoicing\ProductCategory;
 use App\Domain\Invoicing\Product;
 use App\Domain\Invoicing\ServiceCategory;
 use App\Domain\Invoicing\Service;
 use App\Domain\Partners\Partner;
 use App\Repository\AccountRepository;
+use App\Repository\ExpenseCategoryRepository;
 use App\Repository\PartnerRepository;
 use App\Repository\ProductCategoryRepository;
 use App\Repository\ProductRepository;
+use App\Repository\PurchaseInvoiceRepository;
 use App\Repository\ServiceCategoryRepository;
 use App\Repository\ServiceRepository;
 use App\Repository\VatRateRepository;
 use App\Service\InvoiceService;
 use App\Service\LedgerService;
+use App\Service\PurchaseInvoiceService;
 
 $pdo = Database::connection();
 $partnerRepo = new PartnerRepository();
@@ -36,7 +40,10 @@ $productCategoryRepo = new ProductCategoryRepository();
 $productRepo = new ProductRepository();
 $serviceCategoryRepo = new ServiceCategoryRepository();
 $serviceRepo = new ServiceRepository();
+$expenseCategoryRepo = new ExpenseCategoryRepository();
+$purchaseInvoiceRepo = new PurchaseInvoiceRepository();
 $invoiceService = new InvoiceService();
+$purchaseInvoiceService = new PurchaseInvoiceService($purchaseInvoiceRepo);
 $ledgerService = new LedgerService();
 
 $markerName = 'Алфа Трговија ДООЕЛ';
@@ -50,10 +57,11 @@ foreach ($partnerRepo->all() as $existing) {
 // --- ДДВ стапки -----------------------------------------------------------
 
 $vatPayable = $accountRepo->findByCode('260'); // Обврски за данокот на додадена вредност
+$vatReceivable = $accountRepo->findByCode('160'); // Данок на додадена вредност (влезен, одбивен)
 
-$vatStandard = $vatRateRepo->create(new VatRate('Стандардна 18%', '18.00', 'standard', $vatPayable->id));
-$vatReduced = $vatRateRepo->create(new VatRate('Намалена 5%', '5.00', 'reduced', $vatPayable->id));
-$vatZero = $vatRateRepo->create(new VatRate('Извоз 0%', '0.00', 'zero', null));
+$vatStandard = $vatRateRepo->create(new VatRate('Стандардна 18%', '18.00', 'standard', $vatPayable->id, $vatReceivable->id));
+$vatReduced = $vatRateRepo->create(new VatRate('Намалена 5%', '5.00', 'reduced', $vatPayable->id, $vatReceivable->id));
+$vatZero = $vatRateRepo->create(new VatRate('Извоз 0%', '0.00', 'zero', null, null));
 echo "Создадени ДДВ стапки: 18%, 5%, 0% (извоз)\n";
 
 // --- Категории + производи/услуги ------------------------------------------
@@ -153,6 +161,47 @@ foreach ($invoicesToCreate as [$partnerKey, $date, $dueDate, $mode, $lines]) {
     }
 
     echo "Создадена фактура за партнер '$partnerKey' ($date, статус: $mode)\n";
+}
+
+// --- Категории на трошоци + влезни фактури ---------------------------------
+// Огледало на продажната страна, но сметката е обврска/трошок, не приход, а
+// ДДВ стапката се внесува рачно по линија (не се резолвира од категоријата).
+
+$goodsForResale = $accountRepo->findByCode('660'); // Стоки на залиха
+$externalServices = $accountRepo->findByCode('419'); // Останати услуги
+$rentExpense = $accountRepo->findByCode('414'); // Наемнини - лизинг
+
+$expenseCategoryIds = [
+    'stoki' => $expenseCategoryRepo->create(new ExpenseCategory('Набавка на стоки за препродажба', $goodsForResale->id, $goodsForResale->id, 'full')),
+    'usluzi' => $expenseCategoryRepo->create(new ExpenseCategory('Надворешни услуги', $externalServices->id, null, 'full')),
+    'naem' => $expenseCategoryRepo->create(new ExpenseCategory('Наемнина', $rentExpense->id, null, 'full')),
+];
+echo "Создадени " . count($expenseCategoryIds) . " категории на трошоци\n";
+
+$purchaseInvoicesToCreate = [
+    ['gama', 'ГАМА-2026-118', '2026-07-08', '2026-08-07', 'posted_paid', [
+        ['category_id' => $expenseCategoryIds['stoki'], 'quantity' => '20', 'unit_price' => '2500.00', 'vat_rate_id' => $vatStandard],
+    ]],
+    ['zeta', 'ZETA-0044', '2026-08-03', '2026-09-02', 'posted', [
+        ['category_id' => $expenseCategoryIds['usluzi'], 'quantity' => '1', 'unit_price' => '9500.00', 'vat_rate_id' => $vatReduced, 'description' => 'Одржување опрема'],
+    ]],
+    ['gama', 'ГАМА-2026-131', '2026-08-15', '2026-09-14', 'draft', [
+        ['category_id' => $expenseCategoryIds['naem'], 'quantity' => '1', 'unit_price' => '18000.00', 'vat_rate_id' => $vatStandard],
+    ]],
+];
+
+foreach ($purchaseInvoicesToCreate as [$partnerKey, $supplierNumber, $date, $dueDate, $mode, $lines]) {
+    $purchaseInvoiceId = $purchaseInvoiceService->createPurchaseInvoice($partnerIds[$partnerKey], $supplierNumber, $date, $dueDate, $lines);
+
+    if ($mode === 'posted' || $mode === 'posted_paid') {
+        $purchaseInvoiceService->post($purchaseInvoiceId);
+    }
+
+    if ($mode === 'posted_paid') {
+        $purchaseInvoiceService->markPaid($purchaseInvoiceId);
+    }
+
+    echo "Создадена влезна фактура за партнер '$partnerKey' ($date, статус: $mode)\n";
 }
 
 // --- Рачни journal записи (надвор од фактурирање) -------------------------

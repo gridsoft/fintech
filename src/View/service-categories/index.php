@@ -1,12 +1,12 @@
-<div class="d-flex justify-content-end mb-3">
-    <a href="/service-categories/create" class="btn btn-primary">
-        <i class="bi bi-plus-lg"></i> Нова категорија
-    </a>
-</div>
+<?php ob_start(); ?>
+<a href="/service-categories/create" class="btn btn-primary">
+    <i class="bi bi-plus-lg"></i> Нова категорија
+</a>
+<?php $headerActions = ob_get_clean(); ?>
 
 <div class="card">
     <div class="table-responsive">
-        <table class="table table-hover align-middle mb-0">
+        <table class="table table-hover align-middle mb-0 data-table">
             <thead class="table-light">
                 <tr>
                     <th>Назив</th>
@@ -15,7 +15,7 @@
                     <th>Сметка (странски)</th>
                     <th>ДДВ (странски)</th>
                     <th>Статус</th>
-                    <th class="text-end">Акции</th>
+                    <th class="text-end" data-no-filter>Акции</th>
                 </tr>
             </thead>
             <tbody>
@@ -45,15 +45,21 @@
                             <?php endif; ?>
                         </td>
                         <td class="text-end">
-                            <a href="/service-categories/<?= $category->id ?>/edit" class="btn btn-sm btn-outline-secondary">
-                                <i class="bi bi-pencil"></i>
-                            </a>
-                            <form action="/service-categories/<?= $category->id ?>/delete" method="post" class="d-inline"
-                                  onsubmit="return confirm('Да се избрише категоријата <?= htmlspecialchars(addslashes($category->name)) ?>?');">
-                                <button type="submit" class="btn btn-sm btn-outline-danger">
-                                    <i class="bi bi-trash"></i>
+                            <div class="dropdown">
+                                <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="dropdown" data-bs-display="static" aria-expanded="false">
+                                    <i class="bi bi-three-dots"></i>
                                 </button>
-                            </form>
+                                <ul class="dropdown-menu dropdown-menu-end">
+                                    <li><a class="dropdown-item" href="/service-categories/<?= $category->id ?>/edit"><i class="bi bi-pencil me-2"></i>Уреди</a></li>
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li>
+                                        <form action="/service-categories/<?= $category->id ?>/delete" method="post"
+                                              onsubmit="return confirm('Да се избрише категоријата <?= htmlspecialchars(addslashes($category->name)) ?>?');">
+                                            <button type="submit" class="dropdown-item text-danger"><i class="bi bi-trash me-2"></i>Избриши</button>
+                                        </form>
+                                    </li>
+                                </ul>
+                            </div>
                         </td>
                     </tr>
                 <?php endforeach; ?>

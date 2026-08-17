@@ -1,0 +1,19 @@
+#!/usr/bin/env sh
+# Conventional Commits check, no Node/commitlint dependency.
+# Format: type(optional-scope): description
+# Types: feat, fix, docs, style, refactor, test, chore, build, ci, perf
+
+commit_msg_file="$1"
+first_line=$(head -n1 "$commit_msg_file")
+
+pattern='^(feat|fix|docs|style|refactor|test|chore|build|ci|perf)(\([a-z0-9_-]+\))?: .+'
+
+if ! echo "$first_line" | grep -qE "$pattern"; then
+  echo "✗ Commit message doesn't follow Conventional Commits format."
+  echo "  Expected: type(scope): description   e.g. feat(ledger): add balance check"
+  echo "  Got:      $first_line"
+  echo "  See COMMITS.md for the full type list."
+  exit 1
+fi
+
+echo "✓ commit-msg check passed."

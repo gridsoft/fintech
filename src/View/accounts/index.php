@@ -1,12 +1,12 @@
-<div class="d-flex justify-content-end mb-3">
-    <a href="/accounts/create" class="btn btn-primary">
-        <i class="bi bi-plus-lg"></i> Нова сметка
-    </a>
-</div>
+<?php ob_start(); ?>
+<a href="/accounts/create" class="btn btn-primary">
+    <i class="bi bi-plus-lg"></i> Нова сметка
+</a>
+<?php $headerActions = ob_get_clean(); ?>
 
 <div class="card">
     <div class="table-responsive">
-        <table class="table table-hover align-middle mb-0">
+        <table class="table table-hover align-middle mb-0 data-table">
             <thead class="table-light">
                 <tr>
                     <th>Шифра</th>
@@ -14,7 +14,7 @@
                     <th>Тип</th>
                     <th>Родител</th>
                     <th>Статус</th>
-                    <th class="text-end">Акции</th>
+                    <th class="text-end" data-no-filter>Акции</th>
                 </tr>
             </thead>
             <tbody>
@@ -38,18 +38,22 @@
                             <?php endif; ?>
                         </td>
                         <td class="text-end">
-                            <a href="/accounts/<?= $account->id ?>/ledger" class="btn btn-sm btn-outline-secondary" title="Картица на сметка">
-                                <i class="bi bi-journal-text"></i>
-                            </a>
-                            <a href="/accounts/<?= $account->id ?>/edit" class="btn btn-sm btn-outline-secondary">
-                                <i class="bi bi-pencil"></i>
-                            </a>
-                            <form action="/accounts/<?= $account->id ?>/delete" method="post" class="d-inline"
-                                  onsubmit="return confirm('Да се избрише сметката <?= htmlspecialchars(addslashes($account->code . ' — ' . $account->name)) ?>?');">
-                                <button type="submit" class="btn btn-sm btn-outline-danger">
-                                    <i class="bi bi-trash"></i>
+                            <div class="dropdown">
+                                <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="dropdown" data-bs-display="static" aria-expanded="false">
+                                    <i class="bi bi-three-dots"></i>
                                 </button>
-                            </form>
+                                <ul class="dropdown-menu dropdown-menu-end">
+                                    <li><a class="dropdown-item" href="/accounts/<?= $account->id ?>/ledger"><i class="bi bi-journal-text me-2"></i>Картица на сметка</a></li>
+                                    <li><a class="dropdown-item" href="/accounts/<?= $account->id ?>/edit"><i class="bi bi-pencil me-2"></i>Уреди</a></li>
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li>
+                                        <form action="/accounts/<?= $account->id ?>/delete" method="post"
+                                              onsubmit="return confirm('Да се избрише сметката <?= htmlspecialchars(addslashes($account->code . ' — ' . $account->name)) ?>?');">
+                                            <button type="submit" class="dropdown-item text-danger"><i class="bi bi-trash me-2"></i>Избриши</button>
+                                        </form>
+                                    </li>
+                                </ul>
+                            </div>
                         </td>
                     </tr>
                 <?php endforeach; ?>

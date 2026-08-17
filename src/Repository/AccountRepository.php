@@ -54,6 +54,14 @@ class AccountRepository
         return array_map([Account::class, 'fromRow'], $stmt->fetchAll());
     }
 
+    /** Сметки од група 10 (Парични средства) — единствените валидни за банкарски извод. */
+    public function cashAccounts(): array
+    {
+        $stmt = $this->db->query("SELECT * FROM accounts WHERE code LIKE '10%' AND CHAR_LENGTH(code) = 3 ORDER BY code ASC");
+
+        return array_map([Account::class, 'fromRow'], $stmt->fetchAll());
+    }
+
     public function findByCode(string $code): ?Account
     {
         $stmt = $this->db->prepare('SELECT * FROM accounts WHERE code = ?');

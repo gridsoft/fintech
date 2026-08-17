@@ -61,12 +61,14 @@ class VatRateController
         }
 
         $payableAccountId = $request->input('payable_account_id');
+        $receivableAccountId = $request->input('receivable_account_id');
 
         $vatRate = new VatRate(
             trim($request->input('name')),
             number_format((float) $request->input('rate'), 2, '.', ''),
             $request->input('type'),
             $payableAccountId !== '' ? (int) $payableAccountId : null,
+            $receivableAccountId !== '' ? (int) $receivableAccountId : null,
             $request->input('is_active') === '1'
         );
 
@@ -118,11 +120,13 @@ class VatRateController
         }
 
         $payableAccountId = $request->input('payable_account_id');
+        $receivableAccountId = $request->input('receivable_account_id');
 
         $vatRate->name = trim($request->input('name'));
         $vatRate->rate = number_format((float) $request->input('rate'), 2, '.', '');
         $vatRate->type = $request->input('type');
         $vatRate->payableAccountId = $payableAccountId !== '' ? (int) $payableAccountId : null;
+        $vatRate->receivableAccountId = $receivableAccountId !== '' ? (int) $receivableAccountId : null;
         $vatRate->isActive = $request->input('is_active') === '1';
 
         $this->vatRates->update($vatRate);

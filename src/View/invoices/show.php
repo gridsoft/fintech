@@ -48,7 +48,7 @@ $badgeClass = [
                 <strong>Партнер</strong><br>
                 <?= $partner ? htmlspecialchars($partner->name) : '—' ?><?= ($partner && $partner->isForeign()) ? ' <span class="badge text-bg-light border">странски</span>' : '' ?><br>
                 <?php if ($partner && $partner->taxNumber): ?>ЕДБ: <?= htmlspecialchars($partner->taxNumber) ?><br><?php endif; ?>
-                <?php if ($partner && $partner->address): ?><?= htmlspecialchars($partner->address) ?><?php endif; ?>
+                <?php if ($partner && $partner->addressSummary()): ?><?= htmlspecialchars($partner->addressSummary()) ?><?php endif; ?>
             </div>
         </div>
 
