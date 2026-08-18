@@ -146,6 +146,22 @@ class JournalRepository
         return $results;
     }
 
+    /** Салдо (дебит - кредит) збирно за листа сметки — на пр. сите парични сметки (контролна табла). */
+    public function balanceForAccountIds(array $accountIds): string
+    {
+        if (!$accountIds) {
+            return '0.00';
+        }
+
+        $placeholders = implode(',', array_fill(0, count($accountIds), '?'));
+        $stmt = $this->db->prepare(
+            "SELECT COALESCE(SUM(debit), 0) - COALESCE(SUM(credit), 0) FROM journal_lines WHERE account_id IN ($placeholders)"
+        );
+        $stmt->execute($accountIds);
+
+        return number_format((float) $stmt->fetchColumn(), 2, '.', '');
+    }
+
     /** @return array<int, array{account_id: int, debit: string, credit: string}> само сметки со активност */
     public function balancesByAccount(): array
     {

@@ -156,6 +156,12 @@ html, body {
     padding-top: 0.25rem;
 }
 
+.sidebar-divider {
+    border: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    margin: 0.6rem 0.75rem 0;
+}
+
 .sidebar-link {
     display: flex;
     align-items: center;
@@ -426,6 +432,10 @@ table.dataTable thead .sorting_desc:after {
         opacity: 0;
         padding-top: 0;
         padding-bottom: 0;
+    }
+
+    html.sidebar-collapsed .sidebar-divider {
+        display: none;
     }
 
     html.sidebar-collapsed .sidebar-link span {

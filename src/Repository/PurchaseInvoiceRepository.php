@@ -49,6 +49,34 @@ class PurchaseInvoiceRepository
         return $invoice;
     }
 
+    /** Заведени/платени влезни фактури — за вкупни отворени обврски (контролна табла). */
+    public function openPosted(): array
+    {
+        $stmt = $this->db->query("SELECT * FROM purchase_invoices WHERE status = 'posted' ORDER BY due_date ASC");
+
+        return array_map([PurchaseInvoice::class, 'fromRow'], $stmt->fetchAll());
+    }
+
+    /**
+     * Месечен трошок (нето, во MKD) за заведени/платени влезни фактури од $since наваму —
+     * за трендот на контролната табла.
+     *
+     * @return array<int, array{ym: string, total: string}>
+     */
+    public function monthlyExpenseTotals(string $since): array
+    {
+        $stmt = $this->db->prepare(
+            "SELECT DATE_FORMAT(invoice_date, '%Y-%m') AS ym, SUM(total_net * exchange_rate) AS total
+             FROM purchase_invoices
+             WHERE status IN ('posted', 'paid') AND invoice_date >= ?
+             GROUP BY ym
+             ORDER BY ym ASC"
+        );
+        $stmt->execute([$since]);
+
+        return $stmt->fetchAll();
+    }
+
     public function existsForPartnerAndNumber(int $partnerId, string $supplierNumber): bool
     {
         $stmt = $this->db->prepare('SELECT COUNT(*) FROM purchase_invoices WHERE partner_id = ? AND supplier_number = ?');

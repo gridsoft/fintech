@@ -250,12 +250,10 @@ class CurrencyFxTest extends TestCase
         $journalEntryId = $stmt->fetchColumn();
         $this->assertNotFalse($journalEntryId);
 
-        $stmt = $this->db->prepare(
-            "SELECT COALESCE(SUM(jl.credit), 0) FROM journal_lines jl
-             JOIN accounts a ON a.id = jl.account_id
-             WHERE jl.journal_entry_id = ? AND a.code = '7750'"
-        );
-        $stmt->execute([$journalEntryId]);
+        // Проверка на СПЕЦИФИЧНАТА линија за оваа фактура, не на збирот на записот —
+        // devDB не е изолирана, може да содржи и други отворени EUR фактури.
+        $stmt = $this->db->prepare('SELECT difference FROM fx_revaluation_lines WHERE fx_revaluation_id = ? AND invoice_type = ? AND invoice_id = ?');
+        $stmt->execute([$firstId, 'sales', $invoiceId]);
         $this->assertEquals(59.00, (float) $stmt->fetchColumn());
 
         // Втора превалоризација на ИСТ курс — нема разлика во однос на последната, не смее да книжи ништо.

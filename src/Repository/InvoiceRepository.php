@@ -58,6 +58,34 @@ class InvoiceRepository
         return array_map([InvoiceLine::class, 'fromRow'], $stmt->fetchAll());
     }
 
+    /** Издадени/платени фактури — за AR-остарување и вкупни отворени побарувања (контролна табла). */
+    public function openIssued(): array
+    {
+        $stmt = $this->db->query("SELECT * FROM invoices WHERE status = 'issued' ORDER BY due_date ASC");
+
+        return array_map([Invoice::class, 'fromRow'], $stmt->fetchAll());
+    }
+
+    /**
+     * Месечен приход (нето, во MKD) за издадени/платени фактури од $since наваму —
+     * за трендот на контролната табла.
+     *
+     * @return array<int, array{ym: string, total: string}>
+     */
+    public function monthlyRevenueTotals(string $since): array
+    {
+        $stmt = $this->db->prepare(
+            "SELECT DATE_FORMAT(invoice_date, '%Y-%m') AS ym, SUM(total_net * exchange_rate) AS total
+             FROM invoices
+             WHERE status IN ('issued', 'paid') AND invoice_date >= ?
+             GROUP BY ym
+             ORDER BY ym ASC"
+        );
+        $stmt->execute([$since]);
+
+        return $stmt->fetchAll();
+    }
+
     public function nextNumber(): string
     {
         $year = date('Y');

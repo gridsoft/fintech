@@ -44,18 +44,8 @@
 <div class="app-shell">
     <aside class="sidebar" id="sidebar">
         <nav class="sidebar-nav">
-            <div class="sidebar-heading">Мени</div>
             <a href="/" class="sidebar-link <?= ($activeNav ?? '') === 'home' ? 'active' : '' ?>" title="Контролна табла">
                 <i class="bi bi-grid-1x2-fill"></i> <span>Контролна табла</span>
-            </a>
-            <a href="/accounts" class="sidebar-link <?= ($activeNav ?? '') === 'accounts' ? 'active' : '' ?>" title="Контен план">
-                <i class="bi bi-diagram-3-fill"></i> <span>Контен план</span>
-            </a>
-            <a href="/journal" class="sidebar-link <?= ($activeNav ?? '') === 'journal' ? 'active' : '' ?>" title="Главна книга">
-                <i class="bi bi-journal-text"></i> <span>Главна книга</span>
-            </a>
-            <a href="/partners" class="sidebar-link <?= ($activeNav ?? '') === 'partners' ? 'active' : '' ?>" title="Партнери">
-                <i class="bi bi-people-fill"></i> <span>Партнери</span>
             </a>
             <a href="/invoices" class="sidebar-link <?= ($activeNav ?? '') === 'invoices' ? 'active' : '' ?>" title="Излезни фактури">
                 <i class="bi bi-receipt"></i> <span>Излезни фактури</span>
@@ -66,11 +56,22 @@
             <a href="/bank-statements" class="sidebar-link <?= ($activeNav ?? '') === 'bank-statements' ? 'active' : '' ?>" title="Изводи">
                 <i class="bi bi-bank"></i> <span>Изводи</span>
             </a>
+            <a href="/partners" class="sidebar-link <?= ($activeNav ?? '') === 'partners' ? 'active' : '' ?>" title="Партнери">
+                <i class="bi bi-people-fill"></i> <span>Партнери</span>
+            </a>
+
+            <div class="sidebar-heading">Сметководство</div>
+            <a href="/journal" class="sidebar-link <?= ($activeNav ?? '') === 'journal' ? 'active' : '' ?>" title="Главна книга">
+                <i class="bi bi-journal-text"></i> <span>Главна книга</span>
+            </a>
             <a href="/advances" class="sidebar-link <?= ($activeNav ?? '') === 'advances' ? 'active' : '' ?>" title="Аванси">
                 <i class="bi bi-cash-coin"></i> <span>Аванси</span>
             </a>
             <a href="/fixed-assets" class="sidebar-link <?= ($activeNav ?? '') === 'fixed-assets' ? 'active' : '' ?>" title="Основни средства">
                 <i class="bi bi-truck"></i> <span>Основни средства</span>
+            </a>
+            <a href="/fx-revaluations" class="sidebar-link <?= ($activeNav ?? '') === 'fx-revaluations' ? 'active' : '' ?>" title="Курсни разлики">
+                <i class="bi bi-arrow-left-right"></i> <span>Курсни разлики</span>
             </a>
             <a href="/reports" class="sidebar-link <?= ($activeNav ?? '') === 'reports' ? 'active' : '' ?>" title="Извештаи">
                 <i class="bi bi-bar-chart-fill"></i> <span>Извештаи</span>
@@ -93,15 +94,16 @@
                 <i class="bi bi-tags"></i> <span>Категории трошоци</span>
             </a>
 
+            <hr class="sidebar-divider">
             <div class="sidebar-heading">Поставки</div>
+            <a href="/accounts" class="sidebar-link <?= ($activeNav ?? '') === 'accounts' ? 'active' : '' ?>" title="Контен план">
+                <i class="bi bi-diagram-3-fill"></i> <span>Контен план</span>
+            </a>
             <a href="/vat-rates" class="sidebar-link <?= ($activeNav ?? '') === 'vat-rates' ? 'active' : '' ?>" title="ДДВ стапки">
                 <i class="bi bi-percent"></i> <span>ДДВ стапки</span>
             </a>
             <a href="/currencies" class="sidebar-link <?= ($activeNav ?? '') === 'currencies' ? 'active' : '' ?>" title="Валути">
                 <i class="bi bi-currency-exchange"></i> <span>Валути</span>
-            </a>
-            <a href="/fx-revaluations" class="sidebar-link <?= ($activeNav ?? '') === 'fx-revaluations' ? 'active' : '' ?>" title="Курсни разлики">
-                <i class="bi bi-arrow-left-right"></i> <span>Курсни разлики</span>
             </a>
         </nav>
 
