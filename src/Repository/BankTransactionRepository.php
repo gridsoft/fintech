@@ -47,19 +47,41 @@ class BankTransactionRepository
     public function create(BankTransaction $transaction): int
     {
         $stmt = $this->db->prepare(
-            'INSERT INTO bank_transactions (bank_statement_id, transaction_date, description, amount, direction, partner_id)
-             VALUES (?, ?, ?, ?, ?, ?)'
+            'INSERT INTO bank_transactions (bank_statement_id, transaction_date, description, code, amount, balance_after, direction, partner_id, gl_account_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
         );
         $stmt->execute([
             $transaction->bankStatementId,
             $transaction->date,
             $transaction->description,
+            $transaction->code,
             $transaction->amount,
+            $transaction->balanceAfter,
             $transaction->direction,
             $transaction->partnerId,
+            $transaction->glAccountId,
         ]);
 
         return (int) $this->db->lastInsertId();
+    }
+
+    /** Салдо на последната трансакција во изводот, или почетното салдо ако сеуште нема трансакции. */
+    public function lastBalance(int $statementId): string
+    {
+        $stmt = $this->db->prepare(
+            'SELECT balance_after FROM bank_transactions WHERE bank_statement_id = ? ORDER BY id DESC LIMIT 1'
+        );
+        $stmt->execute([$statementId]);
+        $balance = $stmt->fetchColumn();
+
+        if ($balance !== false && $balance !== null) {
+            return (string) $balance;
+        }
+
+        $stmt = $this->db->prepare('SELECT opening_balance FROM bank_statements WHERE id = ?');
+        $stmt->execute([$statementId]);
+
+        return (string) $stmt->fetchColumn();
     }
 
     /** Збир на веќе матчирани трансакции за фактура — тоа Е преостанатото салдо, нема посебно чувано поле. */
@@ -73,11 +95,11 @@ class BankTransactionRepository
         return (string) $stmt->fetchColumn();
     }
 
-    public function markMatched(int $id, string $invoiceType, int $invoiceId, int $journalEntryId): void
+    public function markMatched(int $id, ?string $invoiceType, ?int $invoiceId, int $journalEntryId, int $glAccountId): void
     {
         $stmt = $this->db->prepare(
-            "UPDATE bank_transactions SET matched_status = 'matched', invoice_type = ?, invoice_id = ?, journal_entry_id = ? WHERE id = ?"
+            "UPDATE bank_transactions SET matched_status = 'matched', invoice_type = ?, invoice_id = ?, journal_entry_id = ?, gl_account_id = ? WHERE id = ?"
         );
-        $stmt->execute([$invoiceType, $invoiceId, $journalEntryId, $id]);
+        $stmt->execute([$invoiceType, $invoiceId, $journalEntryId, $glAccountId, $id]);
     }
 }

@@ -12,6 +12,7 @@
                     <?php endforeach; ?>
                 </select>
                 <?php if (isset($errors['account_id'])): ?><div class="invalid-feedback"><?= htmlspecialchars($errors['account_id']) ?></div><?php endif; ?>
+                <div class="form-text"><a href="/accounts/create" target="_blank">+ Нова сметка</a> (нова банка/валута — аналитичка сметка под 10x во контниот план)</div>
             </div>
             <div class="col-md-3">
                 <label for="date" class="form-label">Датум</label>
@@ -20,6 +21,10 @@
                 <?php if (isset($errors['date'])): ?><div class="invalid-feedback"><?= htmlspecialchars($errors['date']) ?></div><?php endif; ?>
             </div>
             <div class="col-md-3">
+                <label for="opening_balance" class="form-label">Почетно салдо</label>
+                <input type="number" step="0.01" id="opening_balance" name="opening_balance" class="form-control" value="<?= htmlspecialchars($old['opening_balance'] ?? '0.00') ?>">
+            </div>
+            <div class="col-md-6">
                 <label for="reference" class="form-label">Референца <span class="text-muted small">(опционално)</span></label>
                 <input type="text" id="reference" name="reference" class="form-control" value="<?= htmlspecialchars($old['reference'] ?? '') ?>">
             </div>

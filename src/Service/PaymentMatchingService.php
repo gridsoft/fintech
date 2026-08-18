@@ -20,15 +20,16 @@ use RuntimeException;
  * (BankTransactionRepository::matchedAmountForInvoice()). Делумно плаќање
  * едноставно значи фактурата останува во тековниот статус со намалено
  * (пресметано) салдо; статусот станува 'paid' само кога салдото стигне 0.
+ *
+ * Конто (gl_account_id) е СЕКОГАШ рачен избор на корисникот — нема
+ * автоматско разрешување според partner->isForeign(). Секоја трансакција,
+ * со или без поврзана фактура, веднаш се книжи во главната книга наспроти
+ * избраното конто.
+ *
  * Види PLAN.md Фаза 7.
  */
 class PaymentMatchingService
 {
-    private const ACCOUNT_RECEIVABLES_DOMESTIC = '1200';
-    private const ACCOUNT_RECEIVABLES_FOREIGN = '1201';
-    private const ACCOUNT_PAYABLES_DOMESTIC = '2200';
-    private const ACCOUNT_PAYABLES_FOREIGN = '2201';
-
     private BankStatementRepository $statements;
     private BankTransactionRepository $transactions;
     private InvoiceRepository $invoices;
@@ -55,36 +56,93 @@ class PaymentMatchingService
         $this->ledger = $ledger ?? new LedgerService();
     }
 
-    public function createStatement(int $accountId, string $date, ?string $reference): int
+    public function createStatement(int $accountId, string $date, ?string $reference, string $openingBalance = '0.00'): int
     {
-        return $this->statements->create(new BankStatement($accountId, $date, $reference ?: null));
+        return $this->statements->create(new BankStatement($accountId, $date, $reference ?: null, number_format((float) $openingBalance, 2, '.', '')));
     }
 
-    public function addTransaction(int $statementId, string $date, ?string $description, string $amount, string $direction, ?int $partnerId): int
+    /**
+     * Инсертира ред во изводот (сеуште неповрзан/некнижен) — конто и
+     * останатите податоци се веќе познати и се чуваат на редот. За
+     * трансакции БЕЗ фактура (Пат А), контролерот веднаш повикува
+     * postManual() по ова за да ја книжи; legacy modal-от исто така работи
+     * над ред создаден овде, пред да го матчира со фактура.
+     */
+    public function addTransaction(int $statementId, string $date, ?string $description, ?string $code, string $amount, string $direction, ?int $partnerId, int $glAccountId): int
     {
         if (!$this->statements->find($statementId)) {
             throw new InvalidArgumentException('Изводот не е пронајден.');
         }
 
-        if (!in_array($direction, BankTransaction::DIRECTIONS, true)) {
-            throw new InvalidArgumentException('Изберете важечка насока (влез/излез).');
+        if (!$this->accounts->find($glAccountId)) {
+            throw new InvalidArgumentException('Изберете важечко конто.');
         }
 
-        if ((float) $amount <= 0) {
-            throw new InvalidArgumentException('Износот мора да биде поголем од нула.');
-        }
-
-        return $this->transactions->create(new BankTransaction(
-            $statementId,
-            $date,
-            number_format((float) $amount, 2, '.', ''),
-            $direction,
-            $description ?: null,
-            $partnerId
-        ));
+        return $this->insertTransactionRow($statementId, $date, $description, $code, $amount, $direction, $partnerId, $glAccountId);
     }
 
-    public function matchToSalesInvoice(int $transactionId, int $invoiceId): void
+    /**
+     * "Пат А" — ја книжи веќе-инсертираната трансакција (без фактура)
+     * наспроти конто-то зачувано на редот (пр. банкарски провизии, плати).
+     */
+    public function postManual(int $transactionId): void
+    {
+        $transaction = $this->transactions->find($transactionId);
+
+        if (!$transaction) {
+            throw new InvalidArgumentException('Трансакцијата не е пронајдена.');
+        }
+
+        if ($transaction->matchedStatus !== 'unmatched') {
+            throw new RuntimeException('Трансакцијата веќе е матчирана.');
+        }
+
+        if (!$transaction->glAccountId) {
+            throw new InvalidArgumentException('Трансакцијата нема избрано конто.');
+        }
+
+        $label = $transaction->direction === 'in' ? 'Уплата' : 'Исплата';
+        $entryLabel = trim($label . ($transaction->description ? " — {$transaction->description}" : ''));
+
+        $entryId = $transaction->direction === 'in'
+            ? $this->ledger->postEntry($transaction->date, $entryLabel, $transaction->code, [
+                ['account_id' => $transaction->accountId, 'debit' => $transaction->amount, 'credit' => '0', 'description' => $entryLabel],
+                ['account_id' => $transaction->glAccountId, 'partner_id' => $transaction->partnerId, 'debit' => '0', 'credit' => $transaction->amount, 'description' => $entryLabel],
+            ])
+            : $this->ledger->postEntry($transaction->date, $entryLabel, $transaction->code, [
+                ['account_id' => $transaction->glAccountId, 'partner_id' => $transaction->partnerId, 'debit' => $transaction->amount, 'credit' => '0', 'description' => $entryLabel],
+                ['account_id' => $transaction->accountId, 'debit' => '0', 'credit' => $transaction->amount, 'description' => $entryLabel],
+            ]);
+
+        $this->transactions->markMatched($transactionId, null, null, $entryId, $transaction->glAccountId);
+    }
+
+    /**
+     * "Пат Б" — партнер и фактура се веќе избрани (единствен ред од
+     * грид-от). Ја инсертира трансакцијата и веднаш ја матчира.
+     */
+    public function addMatchedTransaction(int $statementId, string $date, ?string $description, ?string $code, string $amount, string $direction, int $partnerId, int $glAccountId, string $invoiceType, int $invoiceId): int
+    {
+        if (!$this->statements->find($statementId)) {
+            throw new InvalidArgumentException('Изводот не е пронајден.');
+        }
+
+        if (!in_array($invoiceType, ['sales', 'purchase'], true)) {
+            throw new InvalidArgumentException('Непознат тип фактура.');
+        }
+
+        $transactionId = $this->insertTransactionRow($statementId, $date, $description, $code, $amount, $direction, $partnerId, $glAccountId);
+
+        if ($invoiceType === 'sales') {
+            $this->matchToSalesInvoice($transactionId, $invoiceId, $glAccountId);
+        } else {
+            $this->matchToPurchaseInvoice($transactionId, $invoiceId, $glAccountId);
+        }
+
+        return $transactionId;
+    }
+
+    public function matchToSalesInvoice(int $transactionId, int $invoiceId, int $glAccountId): void
     {
         $transaction = $this->loadUnmatchedTransaction($transactionId, 'in', 'Уплата');
 
@@ -94,10 +152,8 @@ class PaymentMatchingService
             throw new InvalidArgumentException('Фактурата не постои или не е во статус „издадена“.');
         }
 
-        $partner = $this->partners->find($invoice->partnerId);
-
-        if (!$partner) {
-            throw new RuntimeException('Партнерот на фактурата не постои.');
+        if (!$this->accounts->find($glAccountId)) {
+            throw new InvalidArgumentException('Изберете важечко конто.');
         }
 
         $outstanding = bcsub($invoice->totalGross, $this->transactions->matchedAmountForInvoice('sales', $invoiceId), 2);
@@ -106,26 +162,19 @@ class PaymentMatchingService
             throw new InvalidArgumentException("Износот на трансакцијата ({$transaction->amount}) е поголем од преостанатото салдо на фактурата ($outstanding).");
         }
 
-        $receivablesCode = $partner->isForeign() ? self::ACCOUNT_RECEIVABLES_FOREIGN : self::ACCOUNT_RECEIVABLES_DOMESTIC;
-        $receivablesAccount = $this->accounts->findByCode($receivablesCode);
-
-        if (!$receivablesAccount) {
-            throw new RuntimeException("Не постои стандардна сметка за побарувања ($receivablesCode) во контниот план.");
-        }
-
         $entryId = $this->ledger->postEntry($transaction->date, "Уплата по фактура {$invoice->number}", $invoice->number, [
             ['account_id' => $transaction->accountId, 'debit' => $transaction->amount, 'credit' => '0', 'description' => "Уплата по фактура {$invoice->number}"],
-            ['account_id' => $receivablesAccount->id, 'partner_id' => $invoice->partnerId, 'debit' => '0', 'credit' => $transaction->amount, 'description' => "Уплата по фактура {$invoice->number}"],
+            ['account_id' => $glAccountId, 'partner_id' => $invoice->partnerId, 'debit' => '0', 'credit' => $transaction->amount, 'description' => "Уплата по фактура {$invoice->number}"],
         ]);
 
-        $this->transactions->markMatched($transaction->id, 'sales', $invoiceId, $entryId);
+        $this->transactions->markMatched($transaction->id, 'sales', $invoiceId, $entryId, $glAccountId);
 
         if (bccomp($transaction->amount, $outstanding, 2) === 0) {
             $this->invoices->updateStatus($invoiceId, 'paid');
         }
     }
 
-    public function matchToPurchaseInvoice(int $transactionId, int $invoiceId): void
+    public function matchToPurchaseInvoice(int $transactionId, int $invoiceId, int $glAccountId): void
     {
         $transaction = $this->loadUnmatchedTransaction($transactionId, 'out', 'Исплата');
 
@@ -135,10 +184,8 @@ class PaymentMatchingService
             throw new InvalidArgumentException('Фактурата не постои или не е во статус „заведена“.');
         }
 
-        $partner = $this->partners->find($invoice->partnerId);
-
-        if (!$partner) {
-            throw new RuntimeException('Партнерот на фактурата не постои.');
+        if (!$this->accounts->find($glAccountId)) {
+            throw new InvalidArgumentException('Изберете важечко конто.');
         }
 
         $outstanding = bcsub($invoice->totalGross, $this->transactions->matchedAmountForInvoice('purchase', $invoiceId), 2);
@@ -147,23 +194,101 @@ class PaymentMatchingService
             throw new InvalidArgumentException("Износот на трансакцијата ({$transaction->amount}) е поголем од преостанатото салдо на фактурата ($outstanding).");
         }
 
-        $payablesCode = $partner->isForeign() ? self::ACCOUNT_PAYABLES_FOREIGN : self::ACCOUNT_PAYABLES_DOMESTIC;
-        $payablesAccount = $this->accounts->findByCode($payablesCode);
-
-        if (!$payablesAccount) {
-            throw new RuntimeException("Не постои стандардна сметка за обврски кон добавувачи ($payablesCode) во контниот план.");
-        }
-
         $entryId = $this->ledger->postEntry($transaction->date, "Исплата по влезна фактура {$invoice->supplierNumber}", $invoice->supplierNumber, [
-            ['account_id' => $payablesAccount->id, 'partner_id' => $invoice->partnerId, 'debit' => $transaction->amount, 'credit' => '0', 'description' => "Исплата по влезна фактура {$invoice->supplierNumber}"],
+            ['account_id' => $glAccountId, 'partner_id' => $invoice->partnerId, 'debit' => $transaction->amount, 'credit' => '0', 'description' => "Исплата по влезна фактура {$invoice->supplierNumber}"],
             ['account_id' => $transaction->accountId, 'debit' => '0', 'credit' => $transaction->amount, 'description' => "Исплата по влезна фактура {$invoice->supplierNumber}"],
         ]);
 
-        $this->transactions->markMatched($transaction->id, 'purchase', $invoiceId, $entryId);
+        $this->transactions->markMatched($transaction->id, 'purchase', $invoiceId, $entryId, $glAccountId);
 
         if (bccomp($transaction->amount, $outstanding, 2) === 0) {
             $this->purchaseInvoices->updateStatus($invoiceId, 'paid');
         }
+    }
+
+    /**
+     * За сите партнери, ги подготвува отворените излезни/влезни фактури +
+     * преостанато салдо — за авто-пополнување на грид-от за внес по ред
+     * (Пат Б), без потреба од AJAX (се вградува во страницата).
+     *
+     * @return array<int, array<int, array{id: int, number: string, date: string, totalGross: string, outstanding: string}>>
+     */
+    public function openSalesInvoicesByPartner(): array
+    {
+        $byPartner = [];
+
+        foreach ($this->partners->all() as $partner) {
+            $invoices = $this->invoices->openForMatchingByPartner($partner->id);
+
+            if (!$invoices) {
+                continue;
+            }
+
+            $byPartner[$partner->id] = array_map(function ($invoice) {
+                return [
+                    'id' => $invoice->id,
+                    'number' => $invoice->number,
+                    'date' => $invoice->date,
+                    'totalGross' => $invoice->totalGross,
+                    'outstanding' => bcsub($invoice->totalGross, $this->transactions->matchedAmountForInvoice('sales', $invoice->id), 2),
+                ];
+            }, $invoices);
+        }
+
+        return $byPartner;
+    }
+
+    /** @return array<int, array<int, array{id: int, number: string, date: string, totalGross: string, outstanding: string}>> */
+    public function openPurchaseInvoicesByPartner(): array
+    {
+        $byPartner = [];
+
+        foreach ($this->partners->all() as $partner) {
+            $invoices = $this->purchaseInvoices->openForMatchingByPartner($partner->id);
+
+            if (!$invoices) {
+                continue;
+            }
+
+            $byPartner[$partner->id] = array_map(function ($invoice) {
+                return [
+                    'id' => $invoice->id,
+                    'number' => $invoice->supplierNumber,
+                    'date' => $invoice->date,
+                    'totalGross' => $invoice->totalGross,
+                    'outstanding' => bcsub($invoice->totalGross, $this->transactions->matchedAmountForInvoice('purchase', $invoice->id), 2),
+                ];
+            }, $invoices);
+        }
+
+        return $byPartner;
+    }
+
+    private function insertTransactionRow(int $statementId, string $date, ?string $description, ?string $code, string $amount, string $direction, ?int $partnerId, int $glAccountId): int
+    {
+        if (!in_array($direction, BankTransaction::DIRECTIONS, true)) {
+            throw new InvalidArgumentException('Изберете важечка насока (влез/излез).');
+        }
+
+        if ((float) $amount <= 0) {
+            throw new InvalidArgumentException('Износот мора да биде поголем од нула.');
+        }
+
+        $amount = number_format((float) $amount, 2, '.', '');
+        $previousBalance = $this->transactions->lastBalance($statementId);
+        $balanceAfter = $direction === 'in' ? bcadd($previousBalance, $amount, 2) : bcsub($previousBalance, $amount, 2);
+
+        return $this->transactions->create(new BankTransaction(
+            $statementId,
+            $date,
+            $amount,
+            $direction,
+            $description ?: null,
+            $code ?: null,
+            $partnerId,
+            $glAccountId,
+            $balanceAfter
+        ));
     }
 
     private function loadUnmatchedTransaction(int $transactionId, string $expectedDirection, string $expectedDirectionLabel): BankTransaction

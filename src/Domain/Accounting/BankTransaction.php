@@ -20,9 +20,12 @@ class BankTransaction
     public int $bankStatementId;
     public string $date;
     public ?string $description;
+    public ?string $code;
     public string $amount;
+    public ?string $balanceAfter;
     public string $direction;
     public ?int $partnerId;
+    public ?int $glAccountId;
     public string $matchedStatus;
     public ?string $invoiceType;
     public ?int $invoiceId;
@@ -37,7 +40,10 @@ class BankTransaction
         string $amount,
         string $direction,
         ?string $description = null,
+        ?string $code = null,
         ?int $partnerId = null,
+        ?int $glAccountId = null,
+        ?string $balanceAfter = null,
         string $matchedStatus = 'unmatched',
         ?string $invoiceType = null,
         ?int $invoiceId = null,
@@ -48,9 +54,12 @@ class BankTransaction
         $this->bankStatementId = $bankStatementId;
         $this->date = $date;
         $this->description = $description;
+        $this->code = $code;
         $this->amount = $amount;
+        $this->balanceAfter = $balanceAfter;
         $this->direction = $direction;
         $this->partnerId = $partnerId;
+        $this->glAccountId = $glAccountId;
         $this->matchedStatus = $matchedStatus;
         $this->invoiceType = $invoiceType;
         $this->invoiceId = $invoiceId;
@@ -65,7 +74,10 @@ class BankTransaction
             $row['amount'],
             $row['direction'],
             $row['description'],
+            $row['code'],
             $row['partner_id'] !== null ? (int) $row['partner_id'] : null,
+            $row['gl_account_id'] !== null ? (int) $row['gl_account_id'] : null,
+            $row['balance_after'],
             $row['matched_status'],
             $row['invoice_type'],
             $row['invoice_id'] !== null ? (int) $row['invoice_id'] : null,

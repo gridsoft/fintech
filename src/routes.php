@@ -72,7 +72,7 @@ $router->get('/bank-statements', [BankStatementController::class, 'index']);
 $router->get('/bank-statements/create', [BankStatementController::class, 'create']);
 $router->post('/bank-statements', [BankStatementController::class, 'store']);
 $router->get('/bank-statements/{id}', [BankStatementController::class, 'show']);
-$router->post('/bank-statements/{id}/transactions', [BankStatementController::class, 'addTransaction']);
+$router->post('/bank-statements/{id}/transactions', [BankStatementController::class, 'addTransactions']);
 $router->post('/bank-transactions/{id}/match', [BankStatementController::class, 'match']);
 
 $router->get('/reports', [ReportController::class, 'index']);

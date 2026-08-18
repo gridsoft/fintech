@@ -54,10 +54,15 @@ class AccountRepository
         return array_map([Account::class, 'fromRow'], $stmt->fetchAll());
     }
 
-    /** Сметки од група 10 (Парични средства) — единствените валидни за банкарски извод. */
+    /**
+     * Сметки од група 10 (Парични средства) — валидни за банкарски извод.
+     * Вклучува и аналитички под-сметки (пр. "1000" за конкретна банкарска
+     * сметка), не само тро-цифрените синтетички сметки — фирма може да има
+     * повеќе банки/сметки (денарски и девизни) под истата синтетичка сметка.
+     */
     public function cashAccounts(): array
     {
-        $stmt = $this->db->query("SELECT * FROM accounts WHERE code LIKE '10%' AND CHAR_LENGTH(code) = 3 ORDER BY code ASC");
+        $stmt = $this->db->query("SELECT * FROM accounts WHERE code LIKE '10%' AND CHAR_LENGTH(code) >= 3 ORDER BY code ASC");
 
         return array_map([Account::class, 'fromRow'], $stmt->fetchAll());
     }

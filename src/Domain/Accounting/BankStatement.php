@@ -8,6 +8,7 @@ class BankStatement
     public int $accountId;
     public string $date;
     public ?string $reference;
+    public string $openingBalance;
 
     /** @var BankTransaction[] */
     public array $transactions = [];
@@ -16,12 +17,14 @@ class BankStatement
         int $accountId,
         string $date,
         ?string $reference = null,
+        string $openingBalance = '0.00',
         ?int $id = null
     ) {
         $this->id = $id;
         $this->accountId = $accountId;
         $this->date = $date;
         $this->reference = $reference;
+        $this->openingBalance = $openingBalance;
     }
 
     public static function fromRow(array $row): self
@@ -30,6 +33,7 @@ class BankStatement
             (int) $row['account_id'],
             $row['statement_date'],
             $row['reference'],
+            $row['opening_balance'],
             (int) $row['id']
         );
     }

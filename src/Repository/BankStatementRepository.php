@@ -52,9 +52,9 @@ class BankStatementRepository
     public function create(BankStatement $statement): int
     {
         $stmt = $this->db->prepare(
-            'INSERT INTO bank_statements (account_id, statement_date, reference) VALUES (?, ?, ?)'
+            'INSERT INTO bank_statements (account_id, statement_date, reference, opening_balance) VALUES (?, ?, ?, ?)'
         );
-        $stmt->execute([$statement->accountId, $statement->date, $statement->reference]);
+        $stmt->execute([$statement->accountId, $statement->date, $statement->reference, $statement->openingBalance]);
 
         return (int) $this->db->lastInsertId();
     }
