@@ -126,8 +126,8 @@ class PurchaseInvoiceService
                 throw new RuntimeException("Категоријата „{$category->name}“ бара обратно оданочување — тоа сè уште не е поддржано.");
             }
 
-            if ($category->isCapitalizable && !$category->defaultUsefulLifeMonths) {
-                throw new RuntimeException("Категоријата „{$category->name}“ е основно средство без поставен амортизациски век — уреди ја категоријата пред да ја користиш.");
+            if ($category->isCapitalizable && !$category->defaultAnnualRate) {
+                throw new RuntimeException("Категоријата „{$category->name}“ е основно средство без поставена стапка на амортизација — уреди ја категоријата пред да ја користиш.");
             }
 
             if ($category->vatDeductible === 'partial') {

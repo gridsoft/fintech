@@ -18,7 +18,7 @@ class FixedAsset
     public int $purchaseInvoiceLineId;
     public string $purchaseDate;
     public string $purchaseValue;
-    public int $usefulLifeMonths;
+    public string $annualRate;
     public string $status;
 
     public function __construct(
@@ -28,7 +28,7 @@ class FixedAsset
         int $purchaseInvoiceLineId,
         string $purchaseDate,
         string $purchaseValue,
-        int $usefulLifeMonths,
+        string $annualRate,
         string $status = 'active',
         ?int $id = null
     ) {
@@ -39,7 +39,7 @@ class FixedAsset
         $this->purchaseInvoiceLineId = $purchaseInvoiceLineId;
         $this->purchaseDate = $purchaseDate;
         $this->purchaseValue = $purchaseValue;
-        $this->usefulLifeMonths = $usefulLifeMonths;
+        $this->annualRate = $annualRate;
         $this->status = $status;
     }
 
@@ -52,7 +52,7 @@ class FixedAsset
             (int) $row['purchase_invoice_line_id'],
             $row['purchase_date'],
             $row['purchase_value'],
-            (int) $row['useful_life_months'],
+            $row['annual_rate'],
             $row['status'],
             (int) $row['id']
         );
@@ -63,8 +63,11 @@ class FixedAsset
         return self::STATUS_LABELS[$this->status] ?? $this->status;
     }
 
+    /** Месечна амортизација = набавна вредност * годишна стапка (%) / 12. */
     public function monthlyDepreciation(): string
     {
-        return bcdiv($this->purchaseValue, (string) $this->usefulLifeMonths, 2);
+        $yearly = bcmul($this->purchaseValue, bcdiv($this->annualRate, '100', 6), 2);
+
+        return bcdiv($yearly, '12', 2);
     }
 }

@@ -73,10 +73,10 @@
                             </div>
                         </div>
                         <div class="col-md-4">
-                            <label for="default_useful_life_months" class="form-label">Амортизациски век (месеци) <span class="text-muted small">(за основно средство)</span></label>
-                            <input type="number" step="1" min="1" id="default_useful_life_months" name="default_useful_life_months" class="form-control <?= isset($errors['default_useful_life_months']) ? 'is-invalid' : '' ?>"
-                                   value="<?= htmlspecialchars((string) ($category->defaultUsefulLifeMonths ?? '')) ?>">
-                            <?php if (isset($errors['default_useful_life_months'])): ?><div class="invalid-feedback"><?= htmlspecialchars($errors['default_useful_life_months']) ?></div><?php endif; ?>
+                            <label for="default_annual_rate" class="form-label">Стапка на амортизација (% годишно) <span class="text-muted small">(за основно средство)</span></label>
+                            <input type="number" step="0.01" min="0.01" id="default_annual_rate" name="default_annual_rate" class="form-control <?= isset($errors['default_annual_rate']) ? 'is-invalid' : '' ?>"
+                                   value="<?= htmlspecialchars((string) ($category->defaultAnnualRate ?? '')) ?>">
+                            <?php if (isset($errors['default_annual_rate'])): ?><div class="invalid-feedback"><?= htmlspecialchars($errors['default_annual_rate']) ?></div><?php endif; ?>
                         </div>
                         <div class="col-md-4 d-flex align-items-center">
                             <div class="form-check">

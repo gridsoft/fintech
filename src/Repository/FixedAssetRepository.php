@@ -44,7 +44,7 @@ class FixedAssetRepository
     public function create(FixedAsset $asset): int
     {
         $stmt = $this->db->prepare(
-            'INSERT INTO fixed_assets (name, account_id, purchase_invoice_id, purchase_invoice_line_id, purchase_date, purchase_value, useful_life_months, status)
+            'INSERT INTO fixed_assets (name, account_id, purchase_invoice_id, purchase_invoice_line_id, purchase_date, purchase_value, annual_rate, status)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
         );
         $stmt->execute([
@@ -54,11 +54,18 @@ class FixedAssetRepository
             $asset->purchaseInvoiceLineId,
             $asset->purchaseDate,
             $asset->purchaseValue,
-            $asset->usefulLifeMonths,
+            $asset->annualRate,
             $asset->status,
         ]);
 
         return (int) $this->db->lastInsertId();
+    }
+
+    /** Само име и стапка на амортизација се уредливи — вредноста/датумот/контото се замрзнати од изворната фактура. */
+    public function update(FixedAsset $asset): void
+    {
+        $stmt = $this->db->prepare('UPDATE fixed_assets SET name = ?, annual_rate = ? WHERE id = ?');
+        $stmt->execute([$asset->name, $asset->annualRate, $asset->id]);
     }
 
     /** Веќе амортизирано до сега — SUM од сите записи, нема посебно чувано поле (исто како преостанато салдо на фактура). */

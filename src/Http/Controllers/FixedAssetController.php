@@ -62,6 +62,63 @@ class FixedAssetController
         ]);
     }
 
+    public function edit(Request $request, string $id): void
+    {
+        $asset = $this->assets->find((int) $id);
+
+        if (!$asset) {
+            Response::html('<h1>404</h1><p>Основното средство не е пронајдено.</p>', 404);
+            return;
+        }
+
+        Response::view('fixed-assets/edit', [
+            'pageTitle' => 'Уреди — ' . $asset->name,
+            'activeNav' => 'fixed-assets',
+            'breadcrumb' => ['Почетна' => '/', 'Основни средства' => '/fixed-assets', $asset->name => '/fixed-assets/' . $asset->id, 'Уреди'],
+            'asset' => $asset,
+            'errors' => [],
+        ]);
+    }
+
+    public function update(Request $request, string $id): void
+    {
+        $asset = $this->assets->find((int) $id);
+
+        if (!$asset) {
+            Response::html('<h1>404</h1><p>Основното средство не е пронајдено.</p>', 404);
+            return;
+        }
+
+        $name = trim((string) $request->input('name'));
+        $annualRate = $request->input('annual_rate');
+        $errors = [];
+
+        if ($name === '') {
+            $errors['name'] = 'Името е задолжително.';
+        }
+
+        if (!$annualRate || (float) $annualRate <= 0) {
+            $errors['annual_rate'] = 'Внесете важечка стапка на амортизација (%).';
+        }
+
+        if ($errors) {
+            Response::view('fixed-assets/edit', [
+                'pageTitle' => 'Уреди — ' . $asset->name,
+                'activeNav' => 'fixed-assets',
+                'breadcrumb' => ['Почетна' => '/', 'Основни средства' => '/fixed-assets', $asset->name => '/fixed-assets/' . $asset->id, 'Уреди'],
+                'asset' => $asset,
+                'errors' => $errors,
+            ]);
+            return;
+        }
+
+        $asset->name = $name;
+        $asset->annualRate = number_format((float) $annualRate, 2, '.', '');
+        $this->assets->update($asset);
+
+        Response::redirect('/fixed-assets/' . $asset->id);
+    }
+
     public function runDepreciation(Request $request): void
     {
         $period = (string) $request->input('period');

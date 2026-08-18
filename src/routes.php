@@ -78,8 +78,10 @@ $router->post('/bank-statements/{id}/transactions', [BankStatementController::cl
 $router->post('/bank-transactions/{id}/match', [BankStatementController::class, 'match']);
 
 $router->get('/fixed-assets', [FixedAssetController::class, 'index']);
-$router->get('/fixed-assets/{id}', [FixedAssetController::class, 'show']);
 $router->post('/fixed-assets/run-depreciation', [FixedAssetController::class, 'runDepreciation']);
+$router->get('/fixed-assets/{id}', [FixedAssetController::class, 'show']);
+$router->get('/fixed-assets/{id}/edit', [FixedAssetController::class, 'edit']);
+$router->post('/fixed-assets/{id}', [FixedAssetController::class, 'update']);
 
 $router->get('/advances', [AdvanceController::class, 'index']);
 $router->post('/advances/{id}/apply', [AdvanceController::class, 'apply']);

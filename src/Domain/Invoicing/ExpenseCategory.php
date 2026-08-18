@@ -18,7 +18,7 @@ class ExpenseCategory
     public ?int $foreignAccountId;
     public string $vatDeductible;
     public bool $isCapitalizable;
-    public ?int $defaultUsefulLifeMonths;
+    public ?string $defaultAnnualRate;
     public bool $reverseChargeApplicable;
     public bool $isActive;
 
@@ -28,7 +28,7 @@ class ExpenseCategory
         ?int $foreignAccountId = null,
         string $vatDeductible = 'full',
         bool $isCapitalizable = false,
-        ?int $defaultUsefulLifeMonths = null,
+        ?string $defaultAnnualRate = null,
         bool $reverseChargeApplicable = false,
         bool $isActive = true,
         ?int $id = null
@@ -39,7 +39,7 @@ class ExpenseCategory
         $this->foreignAccountId = $foreignAccountId;
         $this->vatDeductible = $vatDeductible;
         $this->isCapitalizable = $isCapitalizable;
-        $this->defaultUsefulLifeMonths = $defaultUsefulLifeMonths;
+        $this->defaultAnnualRate = $defaultAnnualRate;
         $this->reverseChargeApplicable = $reverseChargeApplicable;
         $this->isActive = $isActive;
     }
@@ -52,7 +52,7 @@ class ExpenseCategory
             $row['foreign_account_id'] !== null ? (int) $row['foreign_account_id'] : null,
             $row['vat_deductible'],
             (bool) $row['is_capitalizable'],
-            $row['default_useful_life_months'] !== null ? (int) $row['default_useful_life_months'] : null,
+            $row['default_annual_rate'],
             (bool) $row['reverse_charge_applicable'],
             (bool) $row['is_active'],
             (int) $row['id']

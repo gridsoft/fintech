@@ -52,7 +52,7 @@ class ExpenseCategoryController
         }
 
         $foreignAccountId = $request->input('foreign_account_id');
-        $defaultUsefulLifeMonths = $request->input('default_useful_life_months');
+        $defaultAnnualRate = $request->input('default_annual_rate');
 
         $category = new ExpenseCategory(
             trim($request->input('name')),
@@ -60,7 +60,7 @@ class ExpenseCategoryController
             $foreignAccountId !== '' ? (int) $foreignAccountId : null,
             $request->input('vat_deductible'),
             $request->input('is_capitalizable') === '1',
-            $defaultUsefulLifeMonths !== '' && $defaultUsefulLifeMonths !== null ? (int) $defaultUsefulLifeMonths : null,
+            $defaultAnnualRate !== '' && $defaultAnnualRate !== null ? number_format((float) $defaultAnnualRate, 2, '.', '') : null,
             $request->input('reverse_charge_applicable') === '1',
             $request->input('is_active') === '1'
         );
@@ -106,14 +106,14 @@ class ExpenseCategoryController
         }
 
         $foreignAccountId = $request->input('foreign_account_id');
-        $defaultUsefulLifeMonths = $request->input('default_useful_life_months');
+        $defaultAnnualRate = $request->input('default_annual_rate');
 
         $category->name = trim($request->input('name'));
         $category->domesticAccountId = (int) $request->input('domestic_account_id');
         $category->foreignAccountId = $foreignAccountId !== '' ? (int) $foreignAccountId : null;
         $category->vatDeductible = $request->input('vat_deductible');
         $category->isCapitalizable = $request->input('is_capitalizable') === '1';
-        $category->defaultUsefulLifeMonths = $defaultUsefulLifeMonths !== '' && $defaultUsefulLifeMonths !== null ? (int) $defaultUsefulLifeMonths : null;
+        $category->defaultAnnualRate = $defaultAnnualRate !== '' && $defaultAnnualRate !== null ? number_format((float) $defaultAnnualRate, 2, '.', '') : null;
         $category->reverseChargeApplicable = $request->input('reverse_charge_applicable') === '1';
         $category->isActive = $request->input('is_active') === '1';
 
@@ -164,10 +164,10 @@ class ExpenseCategoryController
         }
 
         if ($request->input('is_capitalizable') === '1') {
-            $defaultUsefulLifeMonths = $request->input('default_useful_life_months');
+            $defaultAnnualRate = $request->input('default_annual_rate');
 
-            if ($defaultUsefulLifeMonths === '' || $defaultUsefulLifeMonths === null || (int) $defaultUsefulLifeMonths <= 0) {
-                $errors['default_useful_life_months'] = 'Внесете амортизациски век (месеци) за основно средство.';
+            if ($defaultAnnualRate === '' || $defaultAnnualRate === null || (float) $defaultAnnualRate <= 0) {
+                $errors['default_annual_rate'] = 'Внесете стапка на амортизација (%) за основно средство.';
             }
         }
 

@@ -48,6 +48,9 @@ class FixedAssetServiceTest extends TestCase
         $vatRateRepo = new VatRateRepository();
         $this->vatStandardId = $vatRateRepo->create(new VatRate('Тест стандардна ОС', '18.00', 'standard', $vatPayable->id, $vatReceivable->id));
 
+        // Стапка 100% годишно = идентичен месечен износ како стариот "12
+        // месеци" фикстур (value/12) — 12 * 8.333...% = 100%, го задржува
+        // истото аритметичко однесување за остатокот на тестовите подолу.
         $expenseCategoryRepo = new ExpenseCategoryRepository();
         $this->expenseCategoryId = $expenseCategoryRepo->create(new ExpenseCategory(
             'Тест опрема ' . uniqid(),
@@ -55,7 +58,7 @@ class FixedAssetServiceTest extends TestCase
             null,
             'full',
             true,
-            12
+            '100.00'
         ));
     }
 
@@ -97,7 +100,7 @@ class FixedAssetServiceTest extends TestCase
 
         $this->assertNotFalse($row, 'основното средство треба да е создадено');
         $this->assertSame('12000.00', $row['purchase_value']);
-        $this->assertSame(12, (int) $row['useful_life_months']);
+        $this->assertSame('100.00', $row['annual_rate']);
         $this->assertSame($this->equipmentAccountId, (int) $row['account_id']);
         $this->assertSame('Тест опрема — набавка', $row['name']);
     }
@@ -173,6 +176,17 @@ class FixedAssetServiceTest extends TestCase
         // Целосно амортизирано — веќе не треба да се вклучи во идно извршување (за ова конкретно средство).
         $this->service->runDepreciation('2027-02-28');
         $this->assertCount(13, $this->assets->depreciationEntriesForAsset($asset->id), 'нема нов запис по целосна амортизација');
+    }
+
+    public function test_run_depreciation_skips_assets_not_yet_purchased_in_that_period(): void
+    {
+        $this->createAndPostInvoice('OS-005', '12000.00'); // набавено 2026-01-01
+        $asset = $this->firstAssetForCategory();
+
+        $this->service->runDepreciation('2025-12-31'); // период ПРЕД набавката
+
+        $this->assertCount(0, $this->assets->depreciationEntriesForAsset($asset->id), 'не смее да амортизира средство пред неговиот датум на набавка');
+        $this->assertSame('0.00', $this->assets->accumulatedDepreciation($asset->id));
     }
 
     private function firstAssetForCategory()

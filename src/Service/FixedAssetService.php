@@ -46,8 +46,8 @@ class FixedAssetService
         ExpenseCategory $category,
         string $purchaseDate
     ): int {
-        if (!$category->defaultUsefulLifeMonths) {
-            throw new InvalidArgumentException("Категоријата „{$category->name}“ нема амортизациски век — не може да се создаде основно средство.");
+        if (!$category->defaultAnnualRate) {
+            throw new InvalidArgumentException("Категоријата „{$category->name}“ нема стапка на амортизација — не може да се создаде основно средство.");
         }
 
         $vatAmount = number_format($line->vatAmount(), 2, '.', '');
@@ -64,7 +64,7 @@ class FixedAssetService
             (int) $line->id,
             $purchaseDate,
             $purchaseValue,
-            $category->defaultUsefulLifeMonths
+            $category->defaultAnnualRate
         ));
     }
 
@@ -89,6 +89,10 @@ class FixedAssetService
         $toRecord = [];
 
         foreach ($this->assets->allActive() as $asset) {
+            if ($asset->purchaseDate > $periodDate) {
+                continue; // средството сеуште не постоело во овој период
+            }
+
             if ($this->assets->hasDepreciationForPeriod($asset->id, $periodDate)) {
                 continue;
             }

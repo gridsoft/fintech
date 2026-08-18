@@ -5,9 +5,14 @@
         <h5 class="mb-1"><?= htmlspecialchars($asset->name) ?></h5>
         <div class="text-muted"><?= $account ? htmlspecialchars($account->code . ' — ' . $account->name) : '—' ?></div>
     </div>
-    <span class="badge <?= $asset->status === 'active' ? 'text-bg-success-subtle text-success-emphasis' : 'text-bg-secondary-subtle text-secondary-emphasis' ?> fs-6">
-        <?= htmlspecialchars($asset->statusLabel()) ?>
-    </span>
+    <div class="d-flex align-items-center gap-2">
+        <span class="badge <?= $asset->status === 'active' ? 'text-bg-success-subtle text-success-emphasis' : 'text-bg-secondary-subtle text-secondary-emphasis' ?> fs-6">
+            <?= htmlspecialchars($asset->statusLabel()) ?>
+        </span>
+        <a href="/fixed-assets/<?= $asset->id ?>/edit" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-pencil"></i> Уреди
+        </a>
+    </div>
 </div>
 
 <div class="row g-3 mb-4">
@@ -25,8 +30,8 @@
     </div>
     <div class="col-md-3">
         <div class="card"><div class="card-body">
-            <div class="text-muted small">Амортизациски век</div>
-            <div class="fw-semibold"><?= $asset->usefulLifeMonths ?> месеци <span class="text-muted small">(<?= number_format((float) $asset->monthlyDepreciation(), 2) ?>/месец)</span></div>
+            <div class="text-muted small">Стапка на амортизација</div>
+            <div class="fw-semibold"><?= number_format((float) $asset->annualRate, 2) ?>% годишно <span class="text-muted small">(<?= number_format((float) $asset->monthlyDepreciation(), 2) ?>/месец)</span></div>
         </div></div>
     </div>
     <div class="col-md-3">
