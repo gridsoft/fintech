@@ -66,6 +66,9 @@
             <a href="/bank-statements" class="sidebar-link <?= ($activeNav ?? '') === 'bank-statements' ? 'active' : '' ?>" title="Изводи">
                 <i class="bi bi-bank"></i> <span>Изводи</span>
             </a>
+            <a href="/advances" class="sidebar-link <?= ($activeNav ?? '') === 'advances' ? 'active' : '' ?>" title="Аванси">
+                <i class="bi bi-cash-coin"></i> <span>Аванси</span>
+            </a>
             <a href="/fixed-assets" class="sidebar-link <?= ($activeNav ?? '') === 'fixed-assets' ? 'active' : '' ?>" title="Основни средства">
                 <i class="bi bi-truck"></i> <span>Основни средства</span>
             </a>

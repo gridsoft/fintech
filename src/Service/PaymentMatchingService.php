@@ -5,6 +5,7 @@ namespace App\Service;
 use App\Domain\Accounting\BankStatement;
 use App\Domain\Accounting\BankTransaction;
 use App\Repository\AccountRepository;
+use App\Repository\AdvanceApplicationRepository;
 use App\Repository\BankStatementRepository;
 use App\Repository\BankTransactionRepository;
 use App\Repository\InvoiceRepository;
@@ -37,6 +38,7 @@ class PaymentMatchingService
     private PartnerRepository $partners;
     private AccountRepository $accounts;
     private LedgerService $ledger;
+    private AdvanceApplicationRepository $advanceApplications;
 
     public function __construct(
         ?BankStatementRepository $statements = null,
@@ -45,7 +47,8 @@ class PaymentMatchingService
         ?PurchaseInvoiceRepository $purchaseInvoices = null,
         ?PartnerRepository $partners = null,
         ?AccountRepository $accounts = null,
-        ?LedgerService $ledger = null
+        ?LedgerService $ledger = null,
+        ?AdvanceApplicationRepository $advanceApplications = null
     ) {
         $this->statements = $statements ?? new BankStatementRepository();
         $this->transactions = $transactions ?? new BankTransactionRepository();
@@ -54,6 +57,25 @@ class PaymentMatchingService
         $this->partners = $partners ?? new PartnerRepository();
         $this->accounts = $accounts ?? new AccountRepository();
         $this->ledger = $ledger ?? new LedgerService();
+        $this->advanceApplications = $advanceApplications ?? new AdvanceApplicationRepository();
+    }
+
+    /** Комбинирано преостанато — гросс минус матчирани банкарски трансакции минус применети аванси (AdvanceService). Јавно бидејќи и BankStatementController::matchDataForUnmatchedTransactions() (legacy modal) го користи истото пресметување. */
+    public function outstandingForSales(string $totalGross, int $invoiceId): string
+    {
+        $matched = $this->transactions->matchedAmountForInvoice('sales', $invoiceId);
+        $applied = $this->advanceApplications->appliedAmountForInvoice('sales', $invoiceId);
+
+        return bcsub(bcsub($totalGross, $matched, 2), $applied, 2);
+    }
+
+    /** @see outstandingForSales */
+    public function outstandingForPurchase(string $totalGross, int $invoiceId): string
+    {
+        $matched = $this->transactions->matchedAmountForInvoice('purchase', $invoiceId);
+        $applied = $this->advanceApplications->appliedAmountForInvoice('purchase', $invoiceId);
+
+        return bcsub(bcsub($totalGross, $matched, 2), $applied, 2);
     }
 
     public function createStatement(int $accountId, string $date, ?string $reference, string $openingBalance = '0.00'): int
@@ -156,7 +178,7 @@ class PaymentMatchingService
             throw new InvalidArgumentException('Изберете важечко конто.');
         }
 
-        $outstanding = bcsub($invoice->totalGross, $this->transactions->matchedAmountForInvoice('sales', $invoiceId), 2);
+        $outstanding = $this->outstandingForSales($invoice->totalGross, $invoiceId);
 
         if (bccomp($transaction->amount, $outstanding, 2) > 0) {
             throw new InvalidArgumentException("Износот на трансакцијата ({$transaction->amount}) е поголем од преостанатото салдо на фактурата ($outstanding).");
@@ -188,7 +210,7 @@ class PaymentMatchingService
             throw new InvalidArgumentException('Изберете важечко конто.');
         }
 
-        $outstanding = bcsub($invoice->totalGross, $this->transactions->matchedAmountForInvoice('purchase', $invoiceId), 2);
+        $outstanding = $this->outstandingForPurchase($invoice->totalGross, $invoiceId);
 
         if (bccomp($transaction->amount, $outstanding, 2) > 0) {
             throw new InvalidArgumentException("Износот на трансакцијата ({$transaction->amount}) е поголем од преостанатото салдо на фактурата ($outstanding).");
@@ -230,7 +252,7 @@ class PaymentMatchingService
                     'number' => $invoice->number,
                     'date' => $invoice->date,
                     'totalGross' => $invoice->totalGross,
-                    'outstanding' => bcsub($invoice->totalGross, $this->transactions->matchedAmountForInvoice('sales', $invoice->id), 2),
+                    'outstanding' => $this->outstandingForSales($invoice->totalGross, $invoice->id),
                 ];
             }, $invoices);
         }
@@ -256,7 +278,7 @@ class PaymentMatchingService
                     'number' => $invoice->supplierNumber,
                     'date' => $invoice->date,
                     'totalGross' => $invoice->totalGross,
-                    'outstanding' => bcsub($invoice->totalGross, $this->transactions->matchedAmountForInvoice('purchase', $invoice->id), 2),
+                    'outstanding' => $this->outstandingForPurchase($invoice->totalGross, $invoice->id),
                 ];
             }, $invoices);
         }

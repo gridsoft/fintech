@@ -279,10 +279,10 @@ class BankStatementController
 
             $outstandingByInvoiceId = [];
             foreach ($openSalesInvoices as $invoice) {
-                $outstandingByInvoiceId['sales_' . $invoice->id] = bcsub($invoice->totalGross, $this->transactions->matchedAmountForInvoice('sales', $invoice->id), 2);
+                $outstandingByInvoiceId['sales_' . $invoice->id] = $this->service->outstandingForSales($invoice->totalGross, $invoice->id);
             }
             foreach ($openPurchaseInvoices as $invoice) {
-                $outstandingByInvoiceId['purchase_' . $invoice->id] = bcsub($invoice->totalGross, $this->transactions->matchedAmountForInvoice('purchase', $invoice->id), 2);
+                $outstandingByInvoiceId['purchase_' . $invoice->id] = $this->service->outstandingForPurchase($invoice->totalGross, $invoice->id);
             }
 
             $data[$transaction->id] = [

@@ -104,23 +104,30 @@ class FixedAssetServiceTest extends TestCase
 
     public function test_run_depreciation_posts_balanced_entry_and_records_per_asset(): void
     {
+        // runDepreciation() намерно работи глобално врз сите активни
+        // средства (реален месечен процес) — не претпоставуваме дека
+        // нашето тест-средство е единственото активно во базата, само дека
+        // ги содржи неговите ефекти (>= 1 средство засегнато вкупно).
         $this->createAndPostInvoice('OS-002', '12000.00');
         $asset = $this->firstAssetForCategory();
 
         $result = $this->service->runDepreciation('2026-02-28');
 
-        $this->assertSame(1, $result['count']);
-        $this->assertSame('1000.00', $result['total']); // 12000 / 12 месеци
+        $this->assertGreaterThanOrEqual(1, $result['count']);
 
         $entries = $this->assets->depreciationEntriesForAsset($asset->id);
         $this->assertCount(1, $entries);
         $this->assertSame('1000.00', $entries[0]->amount);
 
+        // Записот е ЗАЕДНИЧКИ за сите средства засегнати во истиот период
+        // (не еден по средство) — затоа проверуваме дека е балансиран
+        // (дебит==кредит) и дека вкупниот износ е БАРЕМ нашите 1000.00, не
+        // дека е ТОЧНО 1000.00 (може да содржи и други активни средства).
         $stmt = $this->db->prepare('SELECT COALESCE(SUM(debit), 0) AS d, COALESCE(SUM(credit), 0) AS c FROM journal_lines WHERE journal_entry_id = ?');
         $stmt->execute([$entries[0]->journalEntryId]);
         $sums = $stmt->fetch();
-        $this->assertEquals(1000.00, (float) $sums['d']);
-        $this->assertEquals(1000.00, (float) $sums['c']);
+        $this->assertEquals((float) $sums['d'], (float) $sums['c']);
+        $this->assertGreaterThanOrEqual(1000.00, (float) $sums['d']);
     }
 
     public function test_running_depreciation_twice_for_same_period_is_idempotent(): void
@@ -154,16 +161,18 @@ class FixedAssetServiceTest extends TestCase
         $accumulatedAfterSchedule = $this->assets->accumulatedDepreciation($asset->id);
         $this->assertSame('9999.96', $accumulatedAfterSchedule, '12 * 833.33 (заокружено кон долу)');
 
-        $cleanup = $this->service->runDepreciation('2027-01-31');
-        $this->assertSame(1, $cleanup['count']);
-        $this->assertSame('0.04', $cleanup['total'], 'капирано на преостанатото, не на стандардниот месечен износ 833.33');
+        $this->service->runDepreciation('2027-01-31');
 
         $accumulatedFinal = $this->assets->accumulatedDepreciation($asset->id);
         $this->assertSame('10000.00', $accumulatedFinal, 'вкупно амортизирано никогаш не смее да ја надмине набавната вредност');
 
-        // Целосно амортизирано — веќе не треба да се вклучи во идно извршување.
-        $result = $this->service->runDepreciation('2027-02-28');
-        $this->assertSame(0, $result['count']);
+        $entries = $this->assets->depreciationEntriesForAsset($asset->id);
+        $lastEntry = end($entries);
+        $this->assertSame('0.04', $lastEntry->amount, 'капирано на преостанатото, не на стандардниот месечен износ 833.33');
+
+        // Целосно амортизирано — веќе не треба да се вклучи во идно извршување (за ова конкретно средство).
+        $this->service->runDepreciation('2027-02-28');
+        $this->assertCount(13, $this->assets->depreciationEntriesForAsset($asset->id), 'нема нов запис по целосна амортизација');
     }
 
     private function firstAssetForCategory()
