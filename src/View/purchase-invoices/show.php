@@ -40,6 +40,9 @@ $badgeClass = [
                 <h5 class="mb-1">Влезна фактура <?= htmlspecialchars($invoice->supplierNumber) ?></h5>
                 <div class="text-muted">Датум: <?= htmlspecialchars($invoice->date) ?></div>
                 <div class="text-muted">Рок на плаќање: <?= htmlspecialchars($invoice->dueDate) ?></div>
+                <?php if ($currency && !$currency->isBase): ?>
+                    <div class="text-muted">Валута: <?= htmlspecialchars($currency->code) ?>, курс <?= htmlspecialchars($invoice->exchangeRate) ?></div>
+                <?php endif; ?>
             </div>
             <div class="col-6 text-end">
                 <strong>Добавувач</strong><br>
@@ -86,8 +89,14 @@ $badgeClass = [
                 </tr>
                 <tr class="table-light">
                     <td colspan="5" class="text-end fw-bold">За плаќање:</td>
-                    <td class="text-end fw-bold" colspan="2"><?= number_format((float) $invoice->totalGross, 2) ?></td>
+                    <td class="text-end fw-bold" colspan="2"><?= number_format((float) $invoice->totalGross, 2) ?><?= ($currency && !$currency->isBase) ? ' ' . htmlspecialchars($currency->code) : '' ?></td>
                 </tr>
+                <?php if ($currency && !$currency->isBase): ?>
+                    <tr>
+                        <td colspan="5" class="text-end text-muted small">Во денари (по курс <?= htmlspecialchars($invoice->exchangeRate) ?>):</td>
+                        <td class="text-end text-muted small" colspan="2"><?= number_format((float) $invoice->grossInBaseCurrency(), 2) ?> MKD</td>
+                    </tr>
+                <?php endif; ?>
             </tfoot>
         </table>
     </div>

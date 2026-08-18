@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Core\Request;
 use App\Core\Response;
+use App\Repository\CurrencyRepository;
 use App\Repository\ExpenseCategoryRepository;
 use App\Repository\PartnerRepository;
 use App\Repository\PurchaseInvoiceRepository;
@@ -18,6 +19,7 @@ class PurchaseInvoiceController
     private PartnerRepository $partners;
     private ExpenseCategoryRepository $expenseCategories;
     private VatRateRepository $vatRates;
+    private CurrencyRepository $currencies;
     private PurchaseInvoiceService $service;
 
     public function __construct()
@@ -26,6 +28,7 @@ class PurchaseInvoiceController
         $this->partners = new PartnerRepository();
         $this->expenseCategories = new ExpenseCategoryRepository();
         $this->vatRates = new VatRateRepository();
+        $this->currencies = new CurrencyRepository();
         $this->service = new PurchaseInvoiceService($this->invoices);
     }
 
@@ -49,12 +52,15 @@ class PurchaseInvoiceController
             'partners' => $this->partners->all(),
             'expenseCategories' => $this->expenseCategories->allActive(),
             'vatRates' => $this->vatRates->allActive(),
+            'currencies' => $this->currencies->allActive(),
             'errors' => [],
             'old' => [
                 'partner_id' => '',
                 'supplier_number' => '',
                 'date' => date('Y-m-d'),
                 'due_date' => date('Y-m-d', strtotime('+30 days')),
+                'currency_id' => (string) $this->currencies->base()->id,
+                'exchange_rate' => '1.000000',
                 'lines' => [
                     ['category_id' => '', 'vat_rate_id' => '', 'quantity' => '1', 'unit_price' => '', 'description' => ''],
                 ],
@@ -68,6 +74,8 @@ class PurchaseInvoiceController
         $supplierNumber = $request->input('supplier_number');
         $date = $request->input('date');
         $dueDate = $request->input('due_date');
+        $currencyId = $request->input('currency_id');
+        $exchangeRate = (string) $request->input('exchange_rate', '1.000000');
         $lines = $this->collectLines($request);
 
         $errors = [];
@@ -90,7 +98,7 @@ class PurchaseInvoiceController
 
         if (!$errors) {
             try {
-                $invoiceId = $this->service->createPurchaseInvoice((int) $partnerId, $supplierNumber, $date, $dueDate, $lines);
+                $invoiceId = $this->service->createPurchaseInvoice((int) $partnerId, $supplierNumber, $date, $dueDate, $lines, $currencyId ? (int) $currencyId : null, $exchangeRate);
                 Response::redirect("/purchase-invoices/$invoiceId");
                 return;
             } catch (InvalidArgumentException|RuntimeException $e) {
@@ -105,12 +113,15 @@ class PurchaseInvoiceController
             'partners' => $this->partners->all(),
             'expenseCategories' => $this->expenseCategories->allActive(),
             'vatRates' => $this->vatRates->allActive(),
+            'currencies' => $this->currencies->allActive(),
             'errors' => $errors,
             'old' => [
                 'partner_id' => $partnerId,
                 'supplier_number' => $supplierNumber,
                 'date' => $date,
                 'due_date' => $dueDate,
+                'currency_id' => $currencyId,
+                'exchange_rate' => $exchangeRate,
                 'lines' => $lines ?: [
                     ['category_id' => '', 'vat_rate_id' => '', 'quantity' => '1', 'unit_price' => '', 'description' => ''],
                 ],
@@ -134,6 +145,7 @@ class PurchaseInvoiceController
             'invoice' => $invoice,
             'partner' => $this->partners->find($invoice->partnerId),
             'categoriesById' => $this->expenseCategoriesById(),
+            'currency' => $this->currencies->find($invoice->currencyId),
         ]);
     }
 

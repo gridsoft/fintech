@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Core\Request;
 use App\Core\Response;
+use App\Repository\CurrencyRepository;
 use App\Repository\InvoiceRepository;
 use App\Repository\PartnerRepository;
 use App\Repository\ProductRepository;
@@ -18,6 +19,7 @@ class InvoiceController
     private PartnerRepository $partners;
     private ProductRepository $products;
     private ServiceRepository $services;
+    private CurrencyRepository $currencies;
     private InvoiceService $service;
 
     public function __construct()
@@ -26,6 +28,7 @@ class InvoiceController
         $this->partners = new PartnerRepository();
         $this->products = new ProductRepository();
         $this->services = new ServiceRepository();
+        $this->currencies = new CurrencyRepository();
         $this->service = new InvoiceService($this->invoices);
     }
 
@@ -52,11 +55,14 @@ class InvoiceController
             'partners' => $this->partners->all(),
             'products' => $this->products->allActive(),
             'services' => $this->services->allActive(),
+            'currencies' => $this->currencies->allActive(),
             'errors' => [],
             'old' => [
                 'partner_id' => '',
                 'date' => date('Y-m-d'),
                 'due_date' => date('Y-m-d', strtotime('+30 days')),
+                'currency_id' => (string) $this->currencies->base()->id,
+                'exchange_rate' => '1.000000',
                 'lines' => [
                     ['type' => '', 'item_id' => '', 'quantity' => '1', 'unit_price' => '', 'description' => ''],
                 ],
@@ -69,6 +75,8 @@ class InvoiceController
         $partnerId = $request->input('partner_id');
         $date = $request->input('date');
         $dueDate = $request->input('due_date');
+        $currencyId = $request->input('currency_id');
+        $exchangeRate = (string) $request->input('exchange_rate', '1.000000');
         $lines = $this->collectLines($request);
 
         $errors = [];
@@ -87,7 +95,7 @@ class InvoiceController
 
         if (!$errors) {
             try {
-                $invoiceId = $this->service->createInvoice((int) $partnerId, $date, $dueDate, $lines);
+                $invoiceId = $this->service->createInvoice((int) $partnerId, $date, $dueDate, $lines, $currencyId ? (int) $currencyId : null, $exchangeRate);
                 Response::redirect("/invoices/$invoiceId");
                 return;
             } catch (InvalidArgumentException $e) {
@@ -102,11 +110,14 @@ class InvoiceController
             'partners' => $this->partners->all(),
             'products' => $this->products->allActive(),
             'services' => $this->services->allActive(),
+            'currencies' => $this->currencies->allActive(),
             'errors' => $errors,
             'old' => [
                 'partner_id' => $partnerId,
                 'date' => $date,
                 'due_date' => $dueDate,
+                'currency_id' => $currencyId,
+                'exchange_rate' => $exchangeRate,
                 'lines' => $lines ?: [
                     ['type' => '', 'item_id' => '', 'quantity' => '1', 'unit_price' => '', 'description' => ''],
                 ],
@@ -135,6 +146,7 @@ class InvoiceController
             'partner' => $partner,
             'productsById' => $productsById,
             'servicesById' => $servicesById,
+            'currency' => $this->currencies->find($invoice->currencyId),
         ]);
     }
 

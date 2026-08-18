@@ -99,6 +99,7 @@
                         <th style="min-width: 110px">Одлив</th>
                         <th style="min-width: 110px">Салдо (ново)</th>
                         <th style="min-width: 160px">Забелешка</th>
+                        <th style="min-width: 90px">Курс. разлика</th>
                         <th></th>
                     </tr>
                 </thead>
@@ -131,6 +132,10 @@
                         <td><input type="number" step="0.01" min="0" name="amount_out[]" class="form-control matched-amount-out"></td>
                         <td><input type="text" class="form-control matched-balance" readonly tabindex="-1"></td>
                         <td><input type="text" name="description[]" class="form-control"></td>
+                        <td class="text-center matched-fx-close-cell d-none">
+                            <input type="checkbox" class="form-check-input matched-fx-close" title="Затвори ја фактурата и книжи ја разликата како курсна разлика (7750/4750)">
+                            <input type="hidden" name="fx_close[]" value="0" class="matched-fx-close-hidden">
+                        </td>
                         <td><button type="button" class="btn btn-sm btn-outline-danger remove-matched-line"><i class="bi bi-x-lg"></i></button></td>
                     </tr>
                 </tbody>
@@ -177,6 +182,10 @@
         <td><input type="number" step="0.01" min="0" name="amount_out[]" class="form-control matched-amount-out"></td>
         <td><input type="text" class="form-control matched-balance" readonly tabindex="-1"></td>
         <td><input type="text" name="description[]" class="form-control"></td>
+        <td class="text-center matched-fx-close-cell d-none">
+            <input type="checkbox" class="form-check-input matched-fx-close" title="Затвори ја фактурата и книжи ја разликата како курсна разлика (7750/4750)">
+            <input type="hidden" name="fx_close[]" value="0" class="matched-fx-close-hidden">
+        </td>
         <td><button type="button" class="btn btn-sm btn-outline-danger remove-matched-line"><i class="bi bi-x-lg"></i></button></td>
     </tr>
 </template>
@@ -232,7 +241,7 @@
                                     <?php if ($transaction->direction === 'in'): ?>
                                         <?php foreach ($md['openSalesInvoices'] as $invoice): ?>
                                             <tr>
-                                                <td><input type="radio" name="invoice_pick" value="sales:<?= $invoice->id ?>" required></td>
+                                                <td><input type="radio" name="invoice_pick" value="sales:<?= $invoice->id ?>" data-foreign="<?= $invoice->currencyId !== $baseCurrencyId ? '1' : '0' ?>" required></td>
                                                 <td class="fw-semibold"><?= htmlspecialchars($invoice->number) ?></td>
                                                 <td><?= htmlspecialchars($invoice->date) ?></td>
                                                 <td class="text-end"><?= number_format((float) $invoice->totalGross, 2) ?></td>
@@ -242,7 +251,7 @@
                                     <?php else: ?>
                                         <?php foreach ($md['openPurchaseInvoices'] as $invoice): ?>
                                             <tr>
-                                                <td><input type="radio" name="invoice_pick" value="purchase:<?= $invoice->id ?>" required></td>
+                                                <td><input type="radio" name="invoice_pick" value="purchase:<?= $invoice->id ?>" data-foreign="<?= $invoice->currencyId !== $baseCurrencyId ? '1' : '0' ?>" required></td>
                                                 <td class="fw-semibold"><?= htmlspecialchars($invoice->supplierNumber) ?></td>
                                                 <td><?= htmlspecialchars($invoice->date) ?></td>
                                                 <td class="text-end"><?= number_format((float) $invoice->totalGross, 2) ?></td>
@@ -254,6 +263,11 @@
                             </table>
                             </div>
                         <?php endif; ?>
+
+                        <div class="form-check mb-0 d-none js-fx-close-wrap">
+                            <input type="checkbox" name="close_with_fx_difference" value="1" class="form-check-input" id="fxClose<?= $transaction->id ?>">
+                            <label class="form-check-label" for="fxClose<?= $transaction->id ?>">Затвори ја фактурата и книжи ја разликата како курсна разлика (странска валута)</label>
+                        </div>
 
                         <input type="hidden" name="invoice_type" class="js-invoice-type">
                         <input type="hidden" name="invoice_id" class="js-invoice-id">
@@ -281,6 +295,18 @@ document.querySelectorAll('.match-submit').forEach(function (btn) {
         form.querySelector('.js-invoice-id').value = parts[1];
     });
 });
+
+document.querySelectorAll('input[name="invoice_pick"]').forEach(function (radio) {
+    radio.addEventListener('change', function () {
+        var form = radio.closest('form');
+        var wrap = form.querySelector('.js-fx-close-wrap');
+        var isForeign = radio.getAttribute('data-foreign') === '1';
+        wrap.classList.toggle('d-none', !isForeign);
+        if (!isForeign) {
+            wrap.querySelector('input[type="checkbox"]').checked = false;
+        }
+    });
+});
 </script>
 
 <?php
@@ -293,6 +319,7 @@ foreach ($openSalesInvoicesByPartner as $partnerId => $invoices) {
             'number' => $invoice['number'],
             'date' => $invoice['date'],
             'outstanding' => $invoice['outstanding'],
+            'isForeignCurrency' => $invoice['isForeignCurrency'],
         ];
     }
 }
@@ -304,6 +331,7 @@ foreach ($openPurchaseInvoicesByPartner as $partnerId => $invoices) {
             'number' => $invoice['number'],
             'date' => $invoice['date'],
             'outstanding' => $invoice['outstanding'],
+            'isForeignCurrency' => $invoice['isForeignCurrency'],
         ];
     }
 }
@@ -345,6 +373,7 @@ window.openInvoicesByPartner = <?= json_encode($invoicesByPartnerForJs, JSON_HEX
             opt.setAttribute('data-remaining', inv.outstanding);
             opt.setAttribute('data-date', inv.date);
             opt.setAttribute('data-direction', inv.type === 'sales' ? 'in' : 'out');
+            opt.setAttribute('data-foreign', inv.isForeignCurrency ? '1' : '0');
             invoiceSelect.appendChild(opt);
         });
     }
@@ -356,18 +385,30 @@ window.openInvoicesByPartner = <?= json_encode($invoicesByPartnerForJs, JSON_HEX
         var invoiceDateInput = row.querySelector('.matched-invoice-date');
         var amountIn = row.querySelector('.matched-amount-in');
         var amountOut = row.querySelector('.matched-amount-out');
+        var fxCloseCell = row.querySelector('.matched-fx-close-cell');
+        var fxCloseCheckbox = row.querySelector('.matched-fx-close');
+        var fxCloseHidden = row.querySelector('.matched-fx-close-hidden');
 
         if (!opt || !opt.value) {
             remainingInput.value = '';
             invoiceDateInput.value = '';
+            fxCloseCell.classList.add('d-none');
+            fxCloseCheckbox.checked = false;
+            fxCloseHidden.value = '0';
             return;
         }
 
         var remaining = opt.getAttribute('data-remaining');
         var direction = opt.getAttribute('data-direction');
+        var isForeign = opt.getAttribute('data-foreign') === '1';
 
         remainingInput.value = formatMoney(parseFloat(remaining));
         invoiceDateInput.value = opt.getAttribute('data-date');
+        fxCloseCell.classList.toggle('d-none', !isForeign);
+        if (!isForeign) {
+            fxCloseCheckbox.checked = false;
+            fxCloseHidden.value = '0';
+        }
 
         if (direction === 'in') {
             amountIn.value = formatMoney(parseFloat(remaining));
@@ -401,6 +442,8 @@ window.openInvoicesByPartner = <?= json_encode($invoicesByPartnerForJs, JSON_HEX
             applyInvoiceSelection(row);
         } else if (e.target.classList.contains('matched-invoice')) {
             applyInvoiceSelection(row);
+        } else if (e.target.classList.contains('matched-fx-close')) {
+            row.querySelector('.matched-fx-close-hidden').value = e.target.checked ? '1' : '0';
         }
     });
 

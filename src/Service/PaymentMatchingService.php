@@ -8,6 +8,7 @@ use App\Repository\AccountRepository;
 use App\Repository\AdvanceApplicationRepository;
 use App\Repository\BankStatementRepository;
 use App\Repository\BankTransactionRepository;
+use App\Repository\CurrencyRepository;
 use App\Repository\InvoiceRepository;
 use App\Repository\PartnerRepository;
 use App\Repository\PurchaseInvoiceRepository;
@@ -31,12 +32,17 @@ use RuntimeException;
  */
 class PaymentMatchingService
 {
+    /** Веќе постојни конта во контниот план на клиентот (migration 018) — курсни разлики. */
+    private const ACCOUNT_FX_GAIN = '7750';
+    private const ACCOUNT_FX_LOSS = '4750';
+
     private BankStatementRepository $statements;
     private BankTransactionRepository $transactions;
     private InvoiceRepository $invoices;
     private PurchaseInvoiceRepository $purchaseInvoices;
     private PartnerRepository $partners;
     private AccountRepository $accounts;
+    private CurrencyRepository $currencies;
     private LedgerService $ledger;
     private AdvanceApplicationRepository $advanceApplications;
 
@@ -47,6 +53,7 @@ class PaymentMatchingService
         ?PurchaseInvoiceRepository $purchaseInvoices = null,
         ?PartnerRepository $partners = null,
         ?AccountRepository $accounts = null,
+        ?CurrencyRepository $currencies = null,
         ?LedgerService $ledger = null,
         ?AdvanceApplicationRepository $advanceApplications = null
     ) {
@@ -56,6 +63,7 @@ class PaymentMatchingService
         $this->purchaseInvoices = $purchaseInvoices ?? new PurchaseInvoiceRepository();
         $this->partners = $partners ?? new PartnerRepository();
         $this->accounts = $accounts ?? new AccountRepository();
+        $this->currencies = $currencies ?? new CurrencyRepository();
         $this->ledger = $ledger ?? new LedgerService();
         $this->advanceApplications = $advanceApplications ?? new AdvanceApplicationRepository();
     }
@@ -143,7 +151,7 @@ class PaymentMatchingService
      * "Пат Б" — партнер и фактура се веќе избрани (единствен ред од
      * грид-от). Ја инсертира трансакцијата и веднаш ја матчира.
      */
-    public function addMatchedTransaction(int $statementId, string $date, ?string $description, ?string $code, string $amount, string $direction, int $partnerId, int $glAccountId, string $invoiceType, int $invoiceId): int
+    public function addMatchedTransaction(int $statementId, string $date, ?string $description, ?string $code, string $amount, string $direction, int $partnerId, int $glAccountId, string $invoiceType, int $invoiceId, bool $closeWithFxDifference = false): int
     {
         if (!$this->statements->find($statementId)) {
             throw new InvalidArgumentException('Изводот не е пронајден.');
@@ -156,15 +164,24 @@ class PaymentMatchingService
         $transactionId = $this->insertTransactionRow($statementId, $date, $description, $code, $amount, $direction, $partnerId, $glAccountId);
 
         if ($invoiceType === 'sales') {
-            $this->matchToSalesInvoice($transactionId, $invoiceId, $glAccountId);
+            $this->matchToSalesInvoice($transactionId, $invoiceId, $glAccountId, $closeWithFxDifference);
         } else {
-            $this->matchToPurchaseInvoice($transactionId, $invoiceId, $glAccountId);
+            $this->matchToPurchaseInvoice($transactionId, $invoiceId, $glAccountId, $closeWithFxDifference);
         }
 
         return $transactionId;
     }
 
-    public function matchToSalesInvoice(int $transactionId, int $invoiceId, int $glAccountId): void
+    /**
+     * $closeWithFxDifference — само за странски-валутни фактури: ја затвора
+     * фактурата дури и кога уплатениот денарски износ не се совпаѓа точно со
+     * преостанатото книжено салдо (нормално, бидејќи курсот на денот на
+     * уплатата речиси никогаш не е идентичен со курсот на фактурата) — го
+     * книжи разликот на реализирана курсна разлика (7750 добивка / 4750
+     * загуба) и ја затвора фактурата. Без ова знаменце, странска фактура се
+     * однесува исто како денарска: точен износ или делумно плаќање.
+     */
+    public function matchToSalesInvoice(int $transactionId, int $invoiceId, int $glAccountId, bool $closeWithFxDifference = false): void
     {
         $transaction = $this->loadUnmatchedTransaction($transactionId, 'in', 'Уплата');
 
@@ -178,25 +195,37 @@ class PaymentMatchingService
             throw new InvalidArgumentException('Изберете важечко конто.');
         }
 
-        $outstanding = $this->outstandingForSales($invoice->totalGross, $invoiceId);
+        $outstanding = $this->outstandingForSales($invoice->grossInBaseCurrency(), $invoiceId);
+        $fxDifference = $this->resolveFxDifference($invoice->currencyId, $transaction->amount, $outstanding, $closeWithFxDifference);
 
-        if (bccomp($transaction->amount, $outstanding, 2) > 0) {
+        if ($fxDifference === null && bccomp($transaction->amount, $outstanding, 2) > 0) {
             throw new InvalidArgumentException("Износот на трансакцијата ({$transaction->amount}) е поголем од преостанатото салдо на фактурата ($outstanding).");
         }
 
-        $entryId = $this->ledger->postEntry($transaction->date, "Уплата по фактура {$invoice->number}", $invoice->number, [
+        // Без FX-затворање, AR-редот е ист износ како уплатата (делумно или целосно плаќање, старото однесување).
+        // Со FX-затворање, AR-редот секогаш го затвора целото преостанато салдо — разликата со реално уплатеното оди на курсна разлика.
+        $arAmount = $fxDifference !== null ? $outstanding : $transaction->amount;
+
+        $lines = [
             ['account_id' => $transaction->accountId, 'debit' => $transaction->amount, 'credit' => '0', 'description' => "Уплата по фактура {$invoice->number}"],
-            ['account_id' => $glAccountId, 'partner_id' => $invoice->partnerId, 'debit' => '0', 'credit' => $transaction->amount, 'description' => "Уплата по фактура {$invoice->number}"],
-        ]);
+            ['account_id' => $glAccountId, 'partner_id' => $invoice->partnerId, 'debit' => '0', 'credit' => $arAmount, 'description' => "Уплата по фактура {$invoice->number}"],
+        ];
+
+        if ($fxDifference !== null && bccomp($fxDifference, '0.00', 2) !== 0) {
+            $lines[] = $this->fxDifferenceLine($fxDifference, "Курсна разлика по фактура {$invoice->number}");
+        }
+
+        $entryId = $this->ledger->postEntry($transaction->date, "Уплата по фактура {$invoice->number}", $invoice->number, $lines);
 
         $this->transactions->markMatched($transaction->id, 'sales', $invoiceId, $entryId, $glAccountId);
 
-        if (bccomp($transaction->amount, $outstanding, 2) === 0) {
+        if ($fxDifference !== null || bccomp($transaction->amount, $outstanding, 2) === 0) {
             $this->invoices->updateStatus($invoiceId, 'paid');
         }
     }
 
-    public function matchToPurchaseInvoice(int $transactionId, int $invoiceId, int $glAccountId): void
+    /** @see matchToSalesInvoice */
+    public function matchToPurchaseInvoice(int $transactionId, int $invoiceId, int $glAccountId, bool $closeWithFxDifference = false): void
     {
         $transaction = $this->loadUnmatchedTransaction($transactionId, 'out', 'Исплата');
 
@@ -210,22 +239,75 @@ class PaymentMatchingService
             throw new InvalidArgumentException('Изберете важечко конто.');
         }
 
-        $outstanding = $this->outstandingForPurchase($invoice->totalGross, $invoiceId);
+        $outstanding = $this->outstandingForPurchase($invoice->grossInBaseCurrency(), $invoiceId);
+        // Обратен предзнак од продажната страна: плаќање ПОВЕЌЕ MKD од книгованата обврска е загуба, ПОМАЛКУ е добивка.
+        $fxDifference = $this->resolveFxDifference($invoice->currencyId, $outstanding, $transaction->amount, $closeWithFxDifference);
 
-        if (bccomp($transaction->amount, $outstanding, 2) > 0) {
+        if ($fxDifference === null && bccomp($transaction->amount, $outstanding, 2) > 0) {
             throw new InvalidArgumentException("Износот на трансакцијата ({$transaction->amount}) е поголем од преостанатото салдо на фактурата ($outstanding).");
         }
 
-        $entryId = $this->ledger->postEntry($transaction->date, "Исплата по влезна фактура {$invoice->supplierNumber}", $invoice->supplierNumber, [
-            ['account_id' => $glAccountId, 'partner_id' => $invoice->partnerId, 'debit' => $transaction->amount, 'credit' => '0', 'description' => "Исплата по влезна фактура {$invoice->supplierNumber}"],
+        // Исто резонирање како matchToSalesInvoice, огледално: без FX-затворање AP-редот е ист износ како исплатата.
+        $apAmount = $fxDifference !== null ? $outstanding : $transaction->amount;
+
+        $lines = [
+            ['account_id' => $glAccountId, 'partner_id' => $invoice->partnerId, 'debit' => $apAmount, 'credit' => '0', 'description' => "Исплата по влезна фактура {$invoice->supplierNumber}"],
             ['account_id' => $transaction->accountId, 'debit' => '0', 'credit' => $transaction->amount, 'description' => "Исплата по влезна фактура {$invoice->supplierNumber}"],
-        ]);
+        ];
+
+        if ($fxDifference !== null && bccomp($fxDifference, '0.00', 2) !== 0) {
+            $lines[] = $this->fxDifferenceLine($fxDifference, "Курсна разлика по влезна фактура {$invoice->supplierNumber}");
+        }
+
+        $entryId = $this->ledger->postEntry($transaction->date, "Исплата по влезна фактура {$invoice->supplierNumber}", $invoice->supplierNumber, $lines);
 
         $this->transactions->markMatched($transaction->id, 'purchase', $invoiceId, $entryId, $glAccountId);
 
-        if (bccomp($transaction->amount, $outstanding, 2) === 0) {
+        if ($fxDifference !== null || bccomp($transaction->amount, $outstanding, 2) === 0) {
             $this->purchaseInvoices->updateStatus($invoiceId, 'paid');
         }
+    }
+
+    /**
+     * Враќа null кога нема (или не е побарана) FX-затворање — повикувачот
+     * тогаш се однесува по старото строго правило (точен износ/делумно).
+     * Инаку враќа potentially-нула разлика (позитивна = добивка, негативна
+     * = загуба) која треба да се книжи за да се затвори фактурата точно.
+     */
+    private function resolveFxDifference(int $invoiceCurrencyId, string $gainSide, string $lossSide, bool $requested): ?string
+    {
+        if (!$requested) {
+            return null;
+        }
+
+        $currency = $this->currencies->find($invoiceCurrencyId);
+
+        if (!$currency || $currency->isBase) {
+            throw new InvalidArgumentException('Затворање со курсна разлика важи само за фактури во странска валута.');
+        }
+
+        return bcsub($gainSide, $lossSide, 2);
+    }
+
+    /** @return array{account_id: int, debit: string, credit: string, description: string} */
+    private function fxDifferenceLine(string $difference, string $description): array
+    {
+        $isGain = bccomp($difference, '0.00', 2) > 0;
+        $accountCode = $isGain ? self::ACCOUNT_FX_GAIN : self::ACCOUNT_FX_LOSS;
+        $account = $this->accounts->findByCode($accountCode);
+
+        if (!$account) {
+            throw new RuntimeException("Не постои сметка за курсни разлики ($accountCode) во контниот план.");
+        }
+
+        $amount = $isGain ? $difference : bcsub('0.00', $difference, 2);
+
+        return [
+            'account_id' => $account->id,
+            'debit' => $isGain ? '0' : $amount,
+            'credit' => $isGain ? $amount : '0',
+            'description' => $description,
+        ];
     }
 
     /**
@@ -233,10 +315,11 @@ class PaymentMatchingService
      * преостанато салдо — за авто-пополнување на грид-от за внес по ред
      * (Пат Б), без потреба од AJAX (се вградува во страницата).
      *
-     * @return array<int, array<int, array{id: int, number: string, date: string, totalGross: string, outstanding: string}>>
+     * @return array<int, array<int, array{id: int, number: string, date: string, totalGross: string, outstanding: string, isForeignCurrency: bool}>>
      */
     public function openSalesInvoicesByPartner(): array
     {
+        $baseCurrencyId = $this->currencies->base()->id;
         $byPartner = [];
 
         foreach ($this->partners->all() as $partner) {
@@ -246,13 +329,14 @@ class PaymentMatchingService
                 continue;
             }
 
-            $byPartner[$partner->id] = array_map(function ($invoice) {
+            $byPartner[$partner->id] = array_map(function ($invoice) use ($baseCurrencyId) {
                 return [
                     'id' => $invoice->id,
                     'number' => $invoice->number,
                     'date' => $invoice->date,
                     'totalGross' => $invoice->totalGross,
-                    'outstanding' => $this->outstandingForSales($invoice->totalGross, $invoice->id),
+                    'outstanding' => $this->outstandingForSales($invoice->grossInBaseCurrency(), $invoice->id),
+                    'isForeignCurrency' => $invoice->currencyId !== $baseCurrencyId,
                 ];
             }, $invoices);
         }
@@ -260,9 +344,10 @@ class PaymentMatchingService
         return $byPartner;
     }
 
-    /** @return array<int, array<int, array{id: int, number: string, date: string, totalGross: string, outstanding: string}>> */
+    /** @return array<int, array<int, array{id: int, number: string, date: string, totalGross: string, outstanding: string, isForeignCurrency: bool}>> */
     public function openPurchaseInvoicesByPartner(): array
     {
+        $baseCurrencyId = $this->currencies->base()->id;
         $byPartner = [];
 
         foreach ($this->partners->all() as $partner) {
@@ -272,13 +357,14 @@ class PaymentMatchingService
                 continue;
             }
 
-            $byPartner[$partner->id] = array_map(function ($invoice) {
+            $byPartner[$partner->id] = array_map(function ($invoice) use ($baseCurrencyId) {
                 return [
                     'id' => $invoice->id,
                     'number' => $invoice->supplierNumber,
                     'date' => $invoice->date,
                     'totalGross' => $invoice->totalGross,
-                    'outstanding' => $this->outstandingForPurchase($invoice->totalGross, $invoice->id),
+                    'outstanding' => $this->outstandingForPurchase($invoice->grossInBaseCurrency(), $invoice->id),
+                    'isForeignCurrency' => $invoice->currencyId !== $baseCurrencyId,
                 ];
             }, $invoices);
         }

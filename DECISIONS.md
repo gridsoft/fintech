@@ -5,6 +5,38 @@ decision: what was decided, why, and what would make us revisit it. Newest on to
 
 ---
 
+### Currency/FX: documents only, no multi-currency bank accounts; reuse existing 7750/4750 accounts   (2026-08-18)
+Foreign-currency support is scoped to sales/purchase invoices only — bank
+statements and accounts stay MKD-only. A foreign invoice's AR/AP is booked in
+MKD at the invoice-date rate; settlement is a plain MKD bank amount, and the
+gap between that and the booked MKD value is the realized FX difference,
+posted only when the user explicitly opts in (`closeWithFxDifference`) since
+an exact match essentially never happens with real rates. This avoids ever
+needing a foreign-currency-denominated GL account. The gain/loss accounts are
+not new — `7750`/`4750` already exist in this client's imported chart of
+accounts (`018_client_509_analytic_accounts.sql`) for exactly this purpose,
+found before creating anything new.
+**Revisit when:** the client starts holding an actual EUR bank account (not
+just invoicing in EUR) — that reopens the "multi-currency ledger accounts"
+question this decision deliberately avoided.
+
+### FX revaluation diffs from the last revaluation, not the invoice's original rate   (2026-08-18)
+Period-end unrealized revaluation (`FxRevaluationService`) doesn't touch the
+invoice or re-derive from its original exchange rate on every run — each
+invoice's true remaining foreign-currency amount is invariant (computed once
+from the original rate + real settlement history), but the MKD value it's
+compared against for the *next* revaluation's delta is whatever the *last*
+revaluation booked (`fx_revaluation_lines.mkd_value_after`), tracked in a
+small ledger table. Comparing against the original rate on every run would
+double-count prior adjustments unless each revaluation were reversed at the
+start of the next period — which this project doesn't have infrastructure
+for (no auto-reversing entries). Revaluation entries adjust the GL account
+only; they never touch `invoices`/`purchase_invoices` rows, so per-invoice
+outstanding-balance tracking for actual settlement stays untouched.
+**Revisit when:** auto-reversing journal entries become a real feature — at
+that point the simpler "always diff from original rate, reverse each period"
+model becomes viable and this tracking table could be retired.
+
 ### Partner fields: fixed columns, not EAV/meta-key-value   (2026-08-17)
 `partners` grew real typed columns for address (split into line1/line2/postal
 code/city), contact (phone/fax/mobile/email/website), and banking (bank

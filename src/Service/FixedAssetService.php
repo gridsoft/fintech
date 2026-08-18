@@ -38,22 +38,27 @@ class FixedAssetService
     /**
      * Создава основно средство од линија на влезна фактура (повикано од
      * PurchaseInvoiceService::post() за секоја капитализабилна линија).
+     * $exchangeRate ги конвертира износите од валутата на фактурата во MKD —
+     * средството секогаш се води во денари, исто како и амортизационите
+     * книжења (430/029).
      */
     public function createFromPurchaseInvoiceLine(
         int $purchaseInvoiceId,
         string $supplierNumber,
         PurchaseInvoiceLine $line,
         ExpenseCategory $category,
-        string $purchaseDate
+        string $purchaseDate,
+        string $exchangeRate = '1.000000'
     ): int {
         if (!$category->defaultAnnualRate) {
             throw new InvalidArgumentException("Категоријата „{$category->name}“ нема стапка на амортизација — не може да се создаде основно средство.");
         }
 
-        $vatAmount = number_format($line->vatAmount(), 2, '.', '');
+        $lineTotal = bcmul($line->lineTotal, $exchangeRate, 2);
+        $vatAmount = bcmul(number_format($line->vatAmount(), 2, '.', ''), $exchangeRate, 2);
         $purchaseValue = $category->vatDeductible === 'full'
-            ? $line->lineTotal
-            : bcadd($line->lineTotal, $vatAmount, 2);
+            ? $lineTotal
+            : bcadd($lineTotal, $vatAmount, 2);
 
         $name = $line->description ?: "{$category->name} — фактура {$supplierNumber}";
 

@@ -6,6 +6,7 @@ use App\Core\Database;
 use App\Domain\Invoicing\Invoice;
 use App\Domain\Invoicing\InvoiceLine;
 use App\Repository\AccountRepository;
+use App\Repository\CurrencyRepository;
 use App\Repository\InvoiceRepository;
 use App\Repository\PartnerRepository;
 use App\Repository\ProductCategoryRepository;
@@ -37,6 +38,7 @@ class InvoiceService
     private ServiceCategoryRepository $serviceCategories;
     private VatRateRepository $vatRates;
     private AccountRepository $accounts;
+    private CurrencyRepository $currencies;
     private LedgerService $ledger;
 
     public function __construct(
@@ -48,7 +50,8 @@ class InvoiceService
         ?ServiceCategoryRepository $serviceCategories = null,
         ?VatRateRepository $vatRates = null,
         ?AccountRepository $accounts = null,
-        ?LedgerService $ledger = null
+        ?LedgerService $ledger = null,
+        ?CurrencyRepository $currencies = null
     ) {
         $this->db = Database::connection();
         $this->invoices = $invoices ?? new InvoiceRepository();
@@ -59,6 +62,7 @@ class InvoiceService
         $this->serviceCategories = $serviceCategories ?? new ServiceCategoryRepository();
         $this->vatRates = $vatRates ?? new VatRateRepository();
         $this->accounts = $accounts ?? new AccountRepository();
+        $this->currencies = $currencies ?? new CurrencyRepository();
         $this->ledger = $ledger ?? new LedgerService();
     }
 
@@ -67,9 +71,13 @@ class InvoiceService
      * услуга; сметката и ДДВ стапката се резолвираат тука (од категоријата +
      * контекст домашен/странски) и се замрзнуваат на линијата.
      *
+     * Ставките (unit_price, line_total) и вкупните износи се во валутата
+     * на фактурата (currencyId), не во MKD — конверзијата во MKD (главна
+     * книга) се случува дури при issue().
+     *
      * @param array<int, array{type: string, item_id: int, quantity: string|float, unit_price?: string|float|null, description?: ?string}> $lines
      */
-    public function createInvoice(int $partnerId, string $date, string $dueDate, array $lines): int
+    public function createInvoice(int $partnerId, string $date, string $dueDate, array $lines, ?int $currencyId = null, string $exchangeRate = '1.000000'): int
     {
         if (count($lines) < 1) {
             throw new InvalidArgumentException('Фактурата мора да содржи барем 1 ставка.');
@@ -79,6 +87,21 @@ class InvoiceService
 
         if (!$partner) {
             throw new InvalidArgumentException('Партнерот не е пронајден.');
+        }
+
+        $baseCurrency = $this->currencies->base();
+        $currency = $currencyId !== null ? $this->currencies->find($currencyId) : $baseCurrency;
+
+        if (!$currency) {
+            throw new InvalidArgumentException('Изберете важечка валута.');
+        }
+
+        if ($currency->isBase) {
+            $exchangeRate = '1.000000';
+        } elseif ((float) $exchangeRate <= 0) {
+            throw new InvalidArgumentException('Курсот мора да биде поголем од нула.');
+        } else {
+            $exchangeRate = number_format((float) $exchangeRate, 6, '.', '');
         }
 
         $normalized = [];
@@ -149,7 +172,11 @@ class InvoiceService
                 'draft',
                 number_format($totalNet, 2, '.', ''),
                 number_format($totalVat, 2, '.', ''),
-                number_format($totalGross, 2, '.', '')
+                number_format($totalGross, 2, '.', ''),
+                null,
+                null,
+                $currency->id,
+                $exchangeRate
             );
 
             $invoiceId = $this->invoices->create($invoice);
@@ -247,6 +274,9 @@ class InvoiceService
             throw new RuntimeException("Не постои стандардна сметка за побарувања ($receivablesCode) во контниот план.");
         }
 
+        // Групирање по сметка/ДДВ стапка во валутата на документот, па
+        // конверзија во MKD (главната книга е секогаш во денари) — курсот е
+        // замрзнат на фактурата (invoice->exchangeRate), не се повторно бара.
         $revenueByAccount = [];
         $vatByRate = [];
 
@@ -260,12 +290,14 @@ class InvoiceService
         $journalLines = [[
             'account_id' => $receivablesAccount->id,
             'partner_id' => $invoice->partnerId,
-            'debit' => $invoice->totalGross,
+            'debit' => $invoice->grossInBaseCurrency(),
             'credit' => '0',
             'description' => "Фактура {$invoice->number}",
         ]];
 
         foreach ($revenueByAccount as $accountId => $amount) {
+            $amount = bcmul($amount, $invoice->exchangeRate, 2);
+
             if (bccomp($amount, '0.00', 2) <= 0) {
                 continue;
             }
@@ -279,6 +311,8 @@ class InvoiceService
         }
 
         foreach ($vatByRate as $vatRateId => $amount) {
+            $amount = bcmul($amount, $invoice->exchangeRate, 2);
+
             if (bccomp($amount, '0.00', 2) <= 0) {
                 continue;
             }

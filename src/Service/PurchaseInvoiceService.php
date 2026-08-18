@@ -6,6 +6,7 @@ use App\Core\Database;
 use App\Domain\Invoicing\PurchaseInvoice;
 use App\Domain\Invoicing\PurchaseInvoiceLine;
 use App\Repository\AccountRepository;
+use App\Repository\CurrencyRepository;
 use App\Repository\ExpenseCategoryRepository;
 use App\Repository\PartnerRepository;
 use App\Repository\PurchaseInvoiceRepository;
@@ -41,6 +42,7 @@ class PurchaseInvoiceService
     private ExpenseCategoryRepository $expenseCategories;
     private VatRateRepository $vatRates;
     private AccountRepository $accounts;
+    private CurrencyRepository $currencies;
     private LedgerService $ledger;
     private FixedAssetService $fixedAssets;
 
@@ -51,7 +53,8 @@ class PurchaseInvoiceService
         ?VatRateRepository $vatRates = null,
         ?AccountRepository $accounts = null,
         ?LedgerService $ledger = null,
-        ?FixedAssetService $fixedAssets = null
+        ?FixedAssetService $fixedAssets = null,
+        ?CurrencyRepository $currencies = null
     ) {
         $this->db = Database::connection();
         $this->invoices = $invoices ?? new PurchaseInvoiceRepository();
@@ -59,6 +62,7 @@ class PurchaseInvoiceService
         $this->expenseCategories = $expenseCategories ?? new ExpenseCategoryRepository();
         $this->vatRates = $vatRates ?? new VatRateRepository();
         $this->accounts = $accounts ?? new AccountRepository();
+        $this->currencies = $currencies ?? new CurrencyRepository();
         $this->ledger = $ledger ?? new LedgerService();
         $this->fixedAssets = $fixedAssets ?? new FixedAssetService();
     }
@@ -70,9 +74,13 @@ class PurchaseInvoiceService
      * се презема од она што корисникот го внел (се чита од примената
      * фактура), не се резолвира автоматски.
      *
+     * Ставките (unit_price, line_total) и вкупните износи се во валутата
+     * на фактурата (currencyId), не во MKD — конверзијата во MKD (главна
+     * книга) се случува дури при post().
+     *
      * @param array<int, array{category_id: int, quantity: string|float, unit_price: string|float, vat_rate_id: int, description?: ?string}> $lines
      */
-    public function createPurchaseInvoice(int $partnerId, string $supplierNumber, string $date, string $dueDate, array $lines): int
+    public function createPurchaseInvoice(int $partnerId, string $supplierNumber, string $date, string $dueDate, array $lines, ?int $currencyId = null, string $exchangeRate = '1.000000'): int
     {
         if (count($lines) < 1) {
             throw new InvalidArgumentException('Фактурата мора да содржи барем 1 ставка.');
@@ -88,6 +96,21 @@ class PurchaseInvoiceService
 
         if (!$partner) {
             throw new InvalidArgumentException('Партнерот не е пронајден.');
+        }
+
+        $baseCurrency = $this->currencies->base();
+        $currency = $currencyId !== null ? $this->currencies->find($currencyId) : $baseCurrency;
+
+        if (!$currency) {
+            throw new InvalidArgumentException('Изберете важечка валута.');
+        }
+
+        if ($currency->isBase) {
+            $exchangeRate = '1.000000';
+        } elseif ((float) $exchangeRate <= 0) {
+            throw new InvalidArgumentException('Курсот мора да биде поголем од нула.');
+        } else {
+            $exchangeRate = number_format((float) $exchangeRate, 6, '.', '');
         }
 
         if ($this->invoices->existsForPartnerAndNumber($partnerId, $supplierNumber)) {
@@ -175,7 +198,11 @@ class PurchaseInvoiceService
                 'draft',
                 number_format($totalNet, 2, '.', ''),
                 number_format($totalVat, 2, '.', ''),
-                number_format($totalGross, 2, '.', '')
+                number_format($totalGross, 2, '.', ''),
+                null,
+                null,
+                $currency->id,
+                $exchangeRate
             );
 
             $invoiceId = $this->invoices->create($invoice);
@@ -236,6 +263,9 @@ class PurchaseInvoiceService
             throw new RuntimeException("Не постои стандардна сметка за обврски кон добавувачи ($payablesCode) во контниот план.");
         }
 
+        // Групирање по сметка/ДДВ стапка во валутата на документот, па
+        // конверзија во MKD (главната книга е секогаш во денари) — курсот е
+        // замрзнат на фактурата (invoice->exchangeRate), не се повторно бара.
         $expenseByAccount = [];
         $vatByRate = [];
         $capitalizableLines = [];
@@ -265,6 +295,8 @@ class PurchaseInvoiceService
         $journalLines = [];
 
         foreach ($expenseByAccount as $accountId => $amount) {
+            $amount = bcmul($amount, $invoice->exchangeRate, 2);
+
             if (bccomp($amount, '0.00', 2) <= 0) {
                 continue;
             }
@@ -278,6 +310,8 @@ class PurchaseInvoiceService
         }
 
         foreach ($vatByRate as $vatRateId => $amount) {
+            $amount = bcmul($amount, $invoice->exchangeRate, 2);
+
             if (bccomp($amount, '0.00', 2) <= 0) {
                 continue;
             }
@@ -304,7 +338,7 @@ class PurchaseInvoiceService
             'account_id' => $payablesAccount->id,
             'partner_id' => $invoice->partnerId,
             'debit' => '0',
-            'credit' => $invoice->totalGross,
+            'credit' => $invoice->grossInBaseCurrency(),
             'description' => "Влезна фактура {$invoice->supplierNumber}",
         ];
 
@@ -327,7 +361,8 @@ class PurchaseInvoiceService
                 $invoice->supplierNumber,
                 $capitalizable['line'],
                 $capitalizable['category'],
-                $invoice->date
+                $invoice->date,
+                $invoice->exchangeRate
             );
         }
     }

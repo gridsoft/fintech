@@ -103,7 +103,7 @@ class AdvanceController
             $outstandingByInvoiceId = [];
 
             foreach ($openInvoices as $invoice) {
-                $outstandingByInvoiceId[$invoice->id] = $this->service->outstandingForSalesInvoice($invoice->id, $invoice->totalGross);
+                $outstandingByInvoiceId[$invoice->id] = $this->service->outstandingForSalesInvoice($invoice->id, $invoice->grossInBaseCurrency());
             }
 
             $data[$transaction->id] = ['invoiceType' => 'sales', 'openInvoices' => $openInvoices, 'outstandingByInvoiceId' => $outstandingByInvoiceId];
@@ -120,7 +120,7 @@ class AdvanceController
             $outstandingByInvoiceId = [];
 
             foreach ($openInvoices as $invoice) {
-                $outstandingByInvoiceId[$invoice->id] = $this->service->outstandingForPurchaseInvoice($invoice->id, $invoice->totalGross);
+                $outstandingByInvoiceId[$invoice->id] = $this->service->outstandingForPurchaseInvoice($invoice->id, $invoice->grossInBaseCurrency());
             }
 
             $data[$transaction->id] = ['invoiceType' => 'purchase', 'openInvoices' => $openInvoices, 'outstandingByInvoiceId' => $outstandingByInvoiceId];

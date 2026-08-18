@@ -122,10 +122,26 @@ expense_categories: id, name,
 - **Advance invoices (received/paid)**: money received/paid before the final invoice is NOT revenue/expense yet — it posts to a liability/asset "advance" account, and is cleared when the final invoice is issued.
 - **Credit notes**: a linked document (reference to the original invoice), not a new invoice with negative amounts — it must generate a full reversal-style journal entry.
 
-## 7. Currency / FX
+## 7. Currency / FX ✅ Built
 
 - Invoices in foreign currency need `exchange_rate` stored at invoice date.
 - Settlement at a different rate on payment date generates a realized FX gain/loss — needs a dedicated "FX gain/loss" account and a settlement step in the payment-matching flow.
+
+**Implementation notes:** `currencies` table (MKD fixed as base, foreign
+currencies configurable via `/currencies`); `invoices`/`purchase_invoices`
+carry `currency_id`+`exchange_rate` (manual entry, frozen at document
+creation) — the document itself stays in its own currency, conversion to
+MKD happens only at `issue()`/`post()` time. Realized gain/loss: a
+`$closeWithFxDifference` flag on `PaymentMatchingService::matchToSalesInvoice()`/
+`matchToPurchaseInvoice()` lets a foreign-currency invoice close even when
+the settled MKD amount doesn't exactly match the booked MKD balance, posting
+the difference to the client's existing `7750`/`4750` accounts (positive/
+negative FX differences — already present in the imported chart of accounts,
+no new accounts needed). Unrealized period-end revaluation is a separate
+`FxRevaluationService` (`fx_revaluations`/`fx_revaluation_lines` tables) that
+adjusts the GL AR/AP balance to a new rate without touching the invoice
+itself, always diffing against the *last* revaluation (not the original
+rate) so repeated runs don't double-count.
 
 ## 8. Cross-cutting
 
@@ -143,7 +159,7 @@ Given the core double-entry engine and basic invoicing already exist, extend in 
 3. Add reverse-charge posting path for purchases where `expense_category.reverse_charge_applicable = true`. **Guarded, not built**: `PurchaseInvoiceService::createPurchaseInvoice()` throws if a line's category has this flag set, so a category can be configured ahead of time without silently mis-posting until this step lands.
 4. Add fixed-asset posting path for `is_capitalizable` categories (account only for now; depreciation schedule can be a stub/TODO). **Guarded, not built** — same reasoning as step 3.
 5. Add `advance_invoices` and `credit_notes` as their own tables/flows, each with their own posting logic, linked to the original invoice/partner.
-6. Add `exchange_rate` to invoices + FX gain/loss posting on settlement in the payment-matching step.
+6. ✅ Add `exchange_rate` to invoices + FX gain/loss posting on settlement in the payment-matching step. Also added: period-end unrealized revaluation (`FxRevaluationService`), not originally scoped in this step but built alongside since it shares the same account-mapping (see §7).
 7. Update reporting queries (trial balance, VAT ledger) to respect `vat_rates.type` for correct grouping. Note: `ReportService::vatSummary()` already reads `vat_rates`-linked accounts `260`/`160` generically, so it picked up purchase-side input VAT with no changes needed once step 2 landed.
 
 Also not yet built: `vat_deductible = 'partial'` has no stored split ratio in the schema, so `createPurchaseInvoice()` guards against it the same way as steps 3/4 — add the ratio column and the split logic when a real category needs it.

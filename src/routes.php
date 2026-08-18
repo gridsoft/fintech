@@ -17,6 +17,8 @@ use App\Http\Controllers\PurchaseInvoiceController;
 use App\Http\Controllers\BankStatementController;
 use App\Http\Controllers\FixedAssetController;
 use App\Http\Controllers\AdvanceController;
+use App\Http\Controllers\CurrencyController;
+use App\Http\Controllers\FxRevaluationController;
 
 $router = new Router();
 
@@ -85,6 +87,16 @@ $router->post('/fixed-assets/{id}', [FixedAssetController::class, 'update']);
 
 $router->get('/advances', [AdvanceController::class, 'index']);
 $router->post('/advances/{id}/apply', [AdvanceController::class, 'apply']);
+
+$router->get('/currencies', [CurrencyController::class, 'index']);
+$router->get('/currencies/create', [CurrencyController::class, 'create']);
+$router->post('/currencies', [CurrencyController::class, 'store']);
+$router->get('/currencies/{id}/edit', [CurrencyController::class, 'edit']);
+$router->post('/currencies/{id}', [CurrencyController::class, 'update']);
+$router->post('/currencies/{id}/delete', [CurrencyController::class, 'destroy']);
+
+$router->get('/fx-revaluations', [FxRevaluationController::class, 'index']);
+$router->post('/fx-revaluations', [FxRevaluationController::class, 'store']);
 
 $router->get('/reports', [ReportController::class, 'index']);
 $router->get('/reports/trial-balance', [ReportController::class, 'trialBalance']);

@@ -7,6 +7,7 @@ use App\Core\Response;
 use App\Repository\AccountRepository;
 use App\Repository\BankStatementRepository;
 use App\Repository\BankTransactionRepository;
+use App\Repository\CurrencyRepository;
 use App\Repository\InvoiceRepository;
 use App\Repository\PartnerRepository;
 use App\Repository\PurchaseInvoiceRepository;
@@ -22,6 +23,7 @@ class BankStatementController
     private PartnerRepository $partners;
     private InvoiceRepository $invoices;
     private PurchaseInvoiceRepository $purchaseInvoices;
+    private CurrencyRepository $currencies;
     private PaymentMatchingService $service;
 
     public function __construct()
@@ -32,6 +34,7 @@ class BankStatementController
         $this->partners = new PartnerRepository();
         $this->invoices = new InvoiceRepository();
         $this->purchaseInvoices = new PurchaseInvoiceRepository();
+        $this->currencies = new CurrencyRepository();
         $this->service = new PaymentMatchingService($this->statements, $this->transactions);
     }
 
@@ -115,6 +118,7 @@ class BankStatementController
             'partnersById' => $this->partnersById(),
             'accountsById' => $this->accountsById(),
             'glAccounts' => $glAccounts,
+            'baseCurrencyId' => $this->currencies->base()->id,
             'openSalesInvoicesByPartner' => $this->service->openSalesInvoicesByPartner(),
             'openPurchaseInvoicesByPartner' => $this->service->openPurchaseInvoicesByPartner(),
             'matchData' => $this->matchDataForUnmatchedTransactions($statement->transactions),
@@ -147,6 +151,7 @@ class BankStatementController
         $amountsIn = $request->input('amount_in', []);
         $amountsOut = $request->input('amount_out', []);
         $descriptions = $request->input('description', []);
+        $fxCloses = $request->input('fx_close', []);
 
         foreach ($glAccountIds as $i => $glAccountId) {
             $partnerId = $partnerIds[$i] ?? '';
@@ -198,7 +203,8 @@ class BankStatementController
                         (int) $partnerId,
                         (int) $glAccountId,
                         $parts[0],
-                        (int) $parts[1]
+                        (int) $parts[1],
+                        !empty($fxCloses[$i])
                     );
                 } else {
                     $transactionId = $this->service->addTransaction(
@@ -240,11 +246,13 @@ class BankStatementController
             return;
         }
 
+        $closeWithFxDifference = $request->input('close_with_fx_difference') === '1';
+
         try {
             if ($invoiceType === 'sales') {
-                $this->service->matchToSalesInvoice($transactionId, (int) $invoiceId, (int) $glAccountId);
+                $this->service->matchToSalesInvoice($transactionId, (int) $invoiceId, (int) $glAccountId, $closeWithFxDifference);
             } elseif ($invoiceType === 'purchase') {
-                $this->service->matchToPurchaseInvoice($transactionId, (int) $invoiceId, (int) $glAccountId);
+                $this->service->matchToPurchaseInvoice($transactionId, (int) $invoiceId, (int) $glAccountId, $closeWithFxDifference);
             } else {
                 throw new InvalidArgumentException('Непознат тип фактура.');
             }
@@ -279,10 +287,10 @@ class BankStatementController
 
             $outstandingByInvoiceId = [];
             foreach ($openSalesInvoices as $invoice) {
-                $outstandingByInvoiceId['sales_' . $invoice->id] = $this->service->outstandingForSales($invoice->totalGross, $invoice->id);
+                $outstandingByInvoiceId['sales_' . $invoice->id] = $this->service->outstandingForSales($invoice->grossInBaseCurrency(), $invoice->id);
             }
             foreach ($openPurchaseInvoices as $invoice) {
-                $outstandingByInvoiceId['purchase_' . $invoice->id] = $this->service->outstandingForPurchase($invoice->totalGross, $invoice->id);
+                $outstandingByInvoiceId['purchase_' . $invoice->id] = $this->service->outstandingForPurchase($invoice->grossInBaseCurrency(), $invoice->id);
             }
 
             $data[$transaction->id] = [

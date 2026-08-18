@@ -69,6 +69,26 @@ $vatRateOptions = function ($selectedId = null) use ($vatRates) {
                 </div>
             </div>
 
+            <div class="row g-3 mb-3">
+                <div class="col-md-4">
+                    <label for="currency_id" class="form-label">Валута</label>
+                    <select id="currency_id" name="currency_id" class="form-select">
+                        <?php foreach ($currencies as $currency): ?>
+                            <option value="<?= $currency->id ?>" data-is-base="<?= $currency->isBase ? '1' : '0' ?>"
+                                    <?= (string) $old['currency_id'] === (string) $currency->id ? 'selected' : '' ?>>
+                                <?= htmlspecialchars($currency->code . ' — ' . $currency->name) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label for="exchange_rate" class="form-label">Курс (MKD за 1 единица)</label>
+                    <input type="number" step="0.000001" min="0.000001" id="exchange_rate" name="exchange_rate" class="form-control"
+                           value="<?= htmlspecialchars($old['exchange_rate']) ?>">
+                    <div class="form-text">Само за странска валута — курсот од примената фактура/датумот. За MKD секогаш 1.</div>
+                </div>
+            </div>
+
             <div class="table-responsive">
             <table class="table align-middle" id="lines-table">
                 <thead class="table-light">
@@ -184,5 +204,21 @@ $vatRateOptions = function ($selectedId = null) use ($vatRates) {
     tbody.addEventListener('change', recalc);
 
     recalc();
+
+    // Курсот важи само за странска валута — за базната (MKD) секогаш е 1, полето се заклучува.
+    var currencySelect = document.getElementById('currency_id');
+    var exchangeRateInput = document.getElementById('exchange_rate');
+
+    function syncExchangeRate() {
+        var opt = currencySelect.options[currencySelect.selectedIndex];
+        var isBase = opt && opt.getAttribute('data-is-base') === '1';
+        exchangeRateInput.disabled = isBase;
+        if (isBase) {
+            exchangeRateInput.value = '1.000000';
+        }
+    }
+
+    currencySelect.addEventListener('change', syncExchangeRate);
+    syncExchangeRate();
 })();
 </script>

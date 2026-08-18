@@ -97,6 +97,12 @@
             <a href="/vat-rates" class="sidebar-link <?= ($activeNav ?? '') === 'vat-rates' ? 'active' : '' ?>" title="ДДВ стапки">
                 <i class="bi bi-percent"></i> <span>ДДВ стапки</span>
             </a>
+            <a href="/currencies" class="sidebar-link <?= ($activeNav ?? '') === 'currencies' ? 'active' : '' ?>" title="Валути">
+                <i class="bi bi-currency-exchange"></i> <span>Валути</span>
+            </a>
+            <a href="/fx-revaluations" class="sidebar-link <?= ($activeNav ?? '') === 'fx-revaluations' ? 'active' : '' ?>" title="Курсни разлики">
+                <i class="bi bi-arrow-left-right"></i> <span>Курсни разлики</span>
+            </a>
         </nav>
 
         <div class="sidebar-footer d-none d-lg-block">

@@ -74,11 +74,13 @@ class InvoiceRepository
     public function create(Invoice $invoice): int
     {
         $stmt = $this->db->prepare(
-            'INSERT INTO invoices (partner_id, number, invoice_date, due_date, status, total_net, total_vat, total_gross)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+            'INSERT INTO invoices (partner_id, currency_id, exchange_rate, number, invoice_date, due_date, status, total_net, total_vat, total_gross)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
         );
         $stmt->execute([
             $invoice->partnerId,
+            $invoice->currencyId,
+            $invoice->exchangeRate,
             $invoice->number,
             $invoice->date,
             $invoice->dueDate,

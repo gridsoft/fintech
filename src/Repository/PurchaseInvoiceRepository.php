@@ -69,11 +69,13 @@ class PurchaseInvoiceRepository
     public function create(PurchaseInvoice $invoice): int
     {
         $stmt = $this->db->prepare(
-            'INSERT INTO purchase_invoices (partner_id, supplier_number, invoice_date, due_date, status, total_net, total_vat, total_gross)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+            'INSERT INTO purchase_invoices (partner_id, currency_id, exchange_rate, supplier_number, invoice_date, due_date, status, total_net, total_vat, total_gross)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
         );
         $stmt->execute([
             $invoice->partnerId,
+            $invoice->currencyId,
+            $invoice->exchangeRate,
             $invoice->supplierNumber,
             $invoice->date,
             $invoice->dueDate,

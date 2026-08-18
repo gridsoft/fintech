@@ -61,7 +61,7 @@ class AdvanceService
         $amount = number_format((float) $amount, 2, '.', '');
         $this->assertWithinAdvanceRemaining($transaction->id, $transaction->amount, $amount);
 
-        $outstanding = $this->outstandingForSalesInvoice($invoiceId, $invoice->totalGross);
+        $outstanding = $this->outstandingForSalesInvoice($invoiceId, $invoice->grossInBaseCurrency());
 
         if (bccomp($amount, $outstanding, 2) > 0) {
             throw new InvalidArgumentException("Износот ($amount) е поголем од преостанатото салдо на фактурата ($outstanding).");
@@ -96,7 +96,7 @@ class AdvanceService
         $amount = number_format((float) $amount, 2, '.', '');
         $this->assertWithinAdvanceRemaining($transaction->id, $transaction->amount, $amount);
 
-        $outstanding = $this->outstandingForPurchaseInvoice($invoiceId, $invoice->totalGross);
+        $outstanding = $this->outstandingForPurchaseInvoice($invoiceId, $invoice->grossInBaseCurrency());
 
         if (bccomp($amount, $outstanding, 2) > 0) {
             throw new InvalidArgumentException("Износот ($amount) е поголем од преостанатото салдо на фактурата ($outstanding).");
