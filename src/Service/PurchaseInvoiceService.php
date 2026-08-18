@@ -23,12 +23,12 @@ use Throwable;
  * бидејќи е онаа што стои на примената фактура од добавувачот.
  * Види POSTING_RULES_ADDENDUM.md §5.
  *
- * Обратно оданочување (reverse_charge_applicable), капитализација
- * (is_capitalizable) и делумна одбивност на ДДВ (vat_deductible = 'partial')
- * се намерно надвор од опфат — секоја е засебен идентен чекор во addendum-от
- * (сек. „Што да се гради“, чекори 3-4) и бара сопствена постирачка патека
- * што сè уште не е изградена. Категорија со таков атрибут фрла грешка
- * наместо тивко да книжи погрешно.
+ * Обратно оданочување (reverse_charge_applicable) и делумна одбивност на
+ * ДДВ (vat_deductible = 'partial') се намерно надвор од опфат — секоја е
+ * засебен идентен чекор во addendum-от (сек. „Што да се гради“, чекор 3) и
+ * бара сопствена постирачка патека што сè уште не е изградена. Категорија
+ * со таков атрибут фрла грешка наместо тивко да книжи погрешно.
+ * Капитализација (is_capitalizable) е изградена во Фаза 8 — види post().
  */
 class PurchaseInvoiceService
 {
@@ -42,6 +42,7 @@ class PurchaseInvoiceService
     private VatRateRepository $vatRates;
     private AccountRepository $accounts;
     private LedgerService $ledger;
+    private FixedAssetService $fixedAssets;
 
     public function __construct(
         ?PurchaseInvoiceRepository $invoices = null,
@@ -49,7 +50,8 @@ class PurchaseInvoiceService
         ?ExpenseCategoryRepository $expenseCategories = null,
         ?VatRateRepository $vatRates = null,
         ?AccountRepository $accounts = null,
-        ?LedgerService $ledger = null
+        ?LedgerService $ledger = null,
+        ?FixedAssetService $fixedAssets = null
     ) {
         $this->db = Database::connection();
         $this->invoices = $invoices ?? new PurchaseInvoiceRepository();
@@ -58,6 +60,7 @@ class PurchaseInvoiceService
         $this->vatRates = $vatRates ?? new VatRateRepository();
         $this->accounts = $accounts ?? new AccountRepository();
         $this->ledger = $ledger ?? new LedgerService();
+        $this->fixedAssets = $fixedAssets ?? new FixedAssetService();
     }
 
     /**
@@ -123,8 +126,8 @@ class PurchaseInvoiceService
                 throw new RuntimeException("Категоријата „{$category->name}“ бара обратно оданочување — тоа сè уште не е поддржано.");
             }
 
-            if ($category->isCapitalizable) {
-                throw new RuntimeException("Категоријата „{$category->name}“ е за основни средства — тоа сè уште не е поддржано, книжи преку идниот модул за основни средства.");
+            if ($category->isCapitalizable && !$category->defaultUsefulLifeMonths) {
+                throw new RuntimeException("Категоријата „{$category->name}“ е основно средство без поставен амортизациски век — уреди ја категоријата пред да ја користиш.");
             }
 
             if ($category->vatDeductible === 'partial') {
@@ -235,6 +238,7 @@ class PurchaseInvoiceService
 
         $expenseByAccount = [];
         $vatByRate = [];
+        $capitalizableLines = [];
 
         foreach ($invoice->lines as $line) {
             $category = $this->expenseCategories->find($line->expenseCategoryId);
@@ -251,6 +255,10 @@ class PurchaseInvoiceService
             } else {
                 // 'none' — неодбивен ДДВ, влегува во трошокот (partial е веќе одбиено при createPurchaseInvoice).
                 $expenseByAccount[$line->accountId] = bcadd($expenseByAccount[$line->accountId] ?? '0.00', bcadd($line->lineTotal, $vatAmount, 2), 2);
+            }
+
+            if ($category->isCapitalizable) {
+                $capitalizableLines[] = ['line' => $line, 'category' => $category];
             }
         }
 
@@ -312,6 +320,16 @@ class PurchaseInvoiceService
         );
 
         $this->invoices->markPosted($invoiceId, $entryId);
+
+        foreach ($capitalizableLines as $capitalizable) {
+            $this->fixedAssets->createFromPurchaseInvoiceLine(
+                $invoiceId,
+                $invoice->supplierNumber,
+                $capitalizable['line'],
+                $capitalizable['category'],
+                $invoice->date
+            );
+        }
     }
 
     public function markPaid(int $invoiceId): void

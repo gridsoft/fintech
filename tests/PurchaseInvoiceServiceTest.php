@@ -70,14 +70,16 @@ class PurchaseInvoiceServiceTest extends TestCase
             null,
             'full',
             false,
+            null,
             true
         ));
         $this->capitalizableCategoryId = $categoryRepo->create(new ExpenseCategory(
-            'Тест средство категорија ' . uniqid(),
+            'Тест средство категорија без век ' . uniqid(),
             $expenseAccount->id,
             null,
             'full',
-            true
+            true,
+            null
         ));
     }
 
@@ -130,8 +132,11 @@ class PurchaseInvoiceServiceTest extends TestCase
         ]);
     }
 
-    public function test_it_rejects_capitalizable_category_until_fixed_assets_flow_exists(): void
+    public function test_it_rejects_capitalizable_category_without_a_configured_useful_life(): void
     {
+        // Основни средства СЕ поддржани (Фаза 8), но категоријата мора да
+        // има поставено default_useful_life_months пред да се користи —
+        // inak нема од каде да се земе амортизацискиот век.
         $this->expectException(RuntimeException::class);
 
         $this->service->createPurchaseInvoice($this->partnerId, 'SUP-CAP', '2026-01-01', '2026-01-31', [

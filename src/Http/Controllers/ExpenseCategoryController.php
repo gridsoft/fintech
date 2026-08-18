@@ -52,6 +52,7 @@ class ExpenseCategoryController
         }
 
         $foreignAccountId = $request->input('foreign_account_id');
+        $defaultUsefulLifeMonths = $request->input('default_useful_life_months');
 
         $category = new ExpenseCategory(
             trim($request->input('name')),
@@ -59,6 +60,7 @@ class ExpenseCategoryController
             $foreignAccountId !== '' ? (int) $foreignAccountId : null,
             $request->input('vat_deductible'),
             $request->input('is_capitalizable') === '1',
+            $defaultUsefulLifeMonths !== '' && $defaultUsefulLifeMonths !== null ? (int) $defaultUsefulLifeMonths : null,
             $request->input('reverse_charge_applicable') === '1',
             $request->input('is_active') === '1'
         );
@@ -104,12 +106,14 @@ class ExpenseCategoryController
         }
 
         $foreignAccountId = $request->input('foreign_account_id');
+        $defaultUsefulLifeMonths = $request->input('default_useful_life_months');
 
         $category->name = trim($request->input('name'));
         $category->domesticAccountId = (int) $request->input('domestic_account_id');
         $category->foreignAccountId = $foreignAccountId !== '' ? (int) $foreignAccountId : null;
         $category->vatDeductible = $request->input('vat_deductible');
         $category->isCapitalizable = $request->input('is_capitalizable') === '1';
+        $category->defaultUsefulLifeMonths = $defaultUsefulLifeMonths !== '' && $defaultUsefulLifeMonths !== null ? (int) $defaultUsefulLifeMonths : null;
         $category->reverseChargeApplicable = $request->input('reverse_charge_applicable') === '1';
         $category->isActive = $request->input('is_active') === '1';
 
@@ -157,6 +161,14 @@ class ExpenseCategoryController
 
         if (!in_array($request->input('vat_deductible'), ExpenseCategory::VAT_DEDUCTIBLE_OPTIONS, true)) {
             $errors['vat_deductible'] = 'Изберете важечка одбивност на ДДВ.';
+        }
+
+        if ($request->input('is_capitalizable') === '1') {
+            $defaultUsefulLifeMonths = $request->input('default_useful_life_months');
+
+            if ($defaultUsefulLifeMonths === '' || $defaultUsefulLifeMonths === null || (int) $defaultUsefulLifeMonths <= 0) {
+                $errors['default_useful_life_months'] = 'Внесете амортизациски век (месеци) за основно средство.';
+            }
         }
 
         return $errors;

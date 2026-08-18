@@ -15,6 +15,7 @@ use App\Http\Controllers\ServiceController;
 use App\Http\Controllers\ExpenseCategoryController;
 use App\Http\Controllers\PurchaseInvoiceController;
 use App\Http\Controllers\BankStatementController;
+use App\Http\Controllers\FixedAssetController;
 
 $router = new Router();
 
@@ -74,6 +75,10 @@ $router->post('/bank-statements', [BankStatementController::class, 'store']);
 $router->get('/bank-statements/{id}', [BankStatementController::class, 'show']);
 $router->post('/bank-statements/{id}/transactions', [BankStatementController::class, 'addTransactions']);
 $router->post('/bank-transactions/{id}/match', [BankStatementController::class, 'match']);
+
+$router->get('/fixed-assets', [FixedAssetController::class, 'index']);
+$router->get('/fixed-assets/{id}', [FixedAssetController::class, 'show']);
+$router->post('/fixed-assets/run-depreciation', [FixedAssetController::class, 'runDepreciation']);
 
 $router->get('/reports', [ReportController::class, 'index']);
 $router->get('/reports/trial-balance', [ReportController::class, 'trialBalance']);

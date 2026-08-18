@@ -43,8 +43,8 @@ class ExpenseCategoryRepository
     public function create(ExpenseCategory $category): int
     {
         $stmt = $this->db->prepare(
-            'INSERT INTO expense_categories (name, domestic_account_id, foreign_account_id, vat_deductible, is_capitalizable, reverse_charge_applicable, is_active)
-             VALUES (?, ?, ?, ?, ?, ?, ?)'
+            'INSERT INTO expense_categories (name, domestic_account_id, foreign_account_id, vat_deductible, is_capitalizable, default_useful_life_months, reverse_charge_applicable, is_active)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
         );
         $stmt->execute([
             $category->name,
@@ -52,6 +52,7 @@ class ExpenseCategoryRepository
             $category->foreignAccountId,
             $category->vatDeductible,
             $category->isCapitalizable ? 1 : 0,
+            $category->defaultUsefulLifeMonths,
             $category->reverseChargeApplicable ? 1 : 0,
             $category->isActive ? 1 : 0,
         ]);
@@ -62,7 +63,7 @@ class ExpenseCategoryRepository
     public function update(ExpenseCategory $category): void
     {
         $stmt = $this->db->prepare(
-            'UPDATE expense_categories SET name = ?, domestic_account_id = ?, foreign_account_id = ?, vat_deductible = ?, is_capitalizable = ?, reverse_charge_applicable = ?, is_active = ?
+            'UPDATE expense_categories SET name = ?, domestic_account_id = ?, foreign_account_id = ?, vat_deductible = ?, is_capitalizable = ?, default_useful_life_months = ?, reverse_charge_applicable = ?, is_active = ?
              WHERE id = ?'
         );
         $stmt->execute([
@@ -71,6 +72,7 @@ class ExpenseCategoryRepository
             $category->foreignAccountId,
             $category->vatDeductible,
             $category->isCapitalizable ? 1 : 0,
+            $category->defaultUsefulLifeMonths,
             $category->reverseChargeApplicable ? 1 : 0,
             $category->isActive ? 1 : 0,
             $category->id,

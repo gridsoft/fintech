@@ -67,10 +67,16 @@
                         </div>
                         <div class="col-md-4 d-flex align-items-center">
                             <div class="form-check">
-                                <input type="checkbox" id="is_capitalizable" name="is_capitalizable" value="1" class="form-check-input" disabled
+                                <input type="checkbox" id="is_capitalizable" name="is_capitalizable" value="1" class="form-check-input"
                                        <?= ($category->isCapitalizable ?? false) ? 'checked' : '' ?>>
-                                <label for="is_capitalizable" class="form-check-label">Основно средство <span class="text-muted small">(сè уште не е поддржано)</span></label>
+                                <label for="is_capitalizable" class="form-check-label">Основно средство</label>
                             </div>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="default_useful_life_months" class="form-label">Амортизациски век (месеци) <span class="text-muted small">(за основно средство)</span></label>
+                            <input type="number" step="1" min="1" id="default_useful_life_months" name="default_useful_life_months" class="form-control <?= isset($errors['default_useful_life_months']) ? 'is-invalid' : '' ?>"
+                                   value="<?= htmlspecialchars((string) ($category->defaultUsefulLifeMonths ?? '')) ?>">
+                            <?php if (isset($errors['default_useful_life_months'])): ?><div class="invalid-feedback"><?= htmlspecialchars($errors['default_useful_life_months']) ?></div><?php endif; ?>
                         </div>
                         <div class="col-md-4 d-flex align-items-center">
                             <div class="form-check">
@@ -80,7 +86,7 @@
                             </div>
                         </div>
                     </div>
-                    <p class="small text-muted mb-0 mt-2">Делумна одбивност, основни средства и обратно оданочување се идни чекори (POSTING_RULES_ADDENDUM.md) — категорија со таков атрибут ќе одбие книжење наместо да книжи погрешно.</p>
+                    <p class="small text-muted mb-0 mt-2">Делумна одбивност и обратно оданочување се идни чекори (POSTING_RULES_ADDENDUM.md) — категорија со таков атрибут ќе одбие книжење наместо да книжи погрешно. Основно средство: сметката (домашна/странска) мора да е сметка за средства (пр. 022/023), не приходна/трошковна.</p>
                 </div>
             </div>
 
