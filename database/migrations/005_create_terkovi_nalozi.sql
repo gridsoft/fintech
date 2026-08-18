@@ -36,20 +36,10 @@ ALTER TABLE invoices
     ADD COLUMN nalog_id INT NULL AFTER partner_id,
     ADD CONSTRAINT fk_invoices_nalog FOREIGN KEY (nalog_id) REFERENCES nalozi (id);
 
--- Стандарден терк за продажба, ист мапинг како постојната хардкодирана логика (2200/6100/4300).
-INSERT INTO terkovi (name, description) VALUES
-    ('Терк за продажба на стоки/услуги', 'Побарувања (бруто) / Приходи (нето) + ДДВ обврска (ддв)');
-
-INSERT INTO terk_lines (terk_id, account_id, side, amount_source, tag_partner, sort_order) VALUES
-    ((SELECT id FROM (SELECT id FROM terkovi WHERE name = 'Терк за продажба на стоки/услуги') t),
-     (SELECT id FROM (SELECT id FROM accounts WHERE code = '2200') a), 'debit', 'gross', 1, 1),
-    ((SELECT id FROM (SELECT id FROM terkovi WHERE name = 'Терк за продажба на стоки/услуги') t),
-     (SELECT id FROM (SELECT id FROM accounts WHERE code = '6100') a), 'credit', 'net', 0, 2),
-    ((SELECT id FROM (SELECT id FROM terkovi WHERE name = 'Терк за продажба на стоки/услуги') t),
-     (SELECT id FROM (SELECT id FROM accounts WHERE code = '4300') a), 'credit', 'vat', 0, 3);
-
-INSERT INTO nalozi (name, terk_id) VALUES
-    ('Излезни фактури', (SELECT id FROM (SELECT id FROM terkovi WHERE name = 'Терк за продажба на стоки/услуги') t));
-
-UPDATE invoices SET nalog_id = (SELECT id FROM (SELECT id FROM nalozi WHERE name = 'Излезни фактури') n)
-WHERE nalog_id IS NULL;
+-- Забелешка: оваа migration некогаш сееше стандарден терк/налог тука со
+-- INSERT-и што упатуваа на аналитички сметки (2200/6100/4300) создадени
+-- дури во подоцнежна migration (011) — на чисто нова база тоа фрлаше
+-- грешка (сметките сеуште не постојат на овој чекор). Тие INSERT-и се
+-- отстранети: терк/налог механизмот е сепак целосно демонтиран 2 чекори
+-- подоцна (007_drop_terk_nalog.sql), па привремено семе податоци тука
+-- никогаш не преживуваше до нешто што реално ги користи.

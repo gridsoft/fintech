@@ -91,6 +91,25 @@ broke silently. See `TESTING.md`.
 **Revisit when:** a bug class recurs, or once real money starts flowing
 through the system for the first client.
 
+### Deploy: GitHub Actions over SSH, pull-in-place on cPanel   (2026-08-18)
+Push to `master` triggers a GitHub Actions workflow (`.github/workflows/deploy.yml`)
+that SSHes into the cPanel box and runs `git reset --hard origin/master` +
+`composer install` + `php database/migrate.php` in a clone that lives
+*outside* `public_html`, with the domain's document root pointed at that
+clone's `public/` subfolder. Chosen over cPanel's built-in Git Version
+Control (pull-based, would need a manual "Update from Remote" click or a
+webhook cPanel doesn't natively expose) and over FTP-only deploy actions
+(would require committing `vendor/` to the repo, since `composer install`
+can't run without shell access — SSH was confirmed available, so there was
+no reason to accept that tradeoff). Runbook: `DEPLOY.md`. Claude Code itself
+is denied direct `ssh`/`scp`/`sftp` in `.claude/settings.json` — deploys only
+happen through this one reviewed, auditable workflow, not ad-hoc shell
+access to production.
+**Revisit when:** downtime during the in-place `git reset --hard` window
+actually matters (→ move to a releases-directory + symlink-swap pattern), or
+a staging environment is added (→ this workflow becomes the template for a
+second one gated on a different branch/environment).
+
 ---
 
 ## Project decisions (append here)
