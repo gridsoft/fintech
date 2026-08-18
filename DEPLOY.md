@@ -22,23 +22,49 @@ ssh yourcpaneluser@yourhost -p <ssh-port>
 
 git clone https://github.com/gridsoft/fintech.git ~/fintech-app
 cd ~/fintech-app
-composer install --no-dev --optimize-autoloader
+
+# Composer often isn't globally installed on shared hosting — check first:
+composer --version || (curl -sS https://getcomposer.org/installer | php)
+# If it's not global, use `php ~/composer.phar install ...` everywhere below
+# instead of bare `composer install ...`.
+composer install --no-dev --optimize-autoloader --no-interaction
 
 cp .env.example .env
 # edit .env with the REAL production DB credentials — nano/vim .env
+# also set APP_ENV=production and APP_DEBUG=false for a live site
 
-php database/migrate.php   # schema, migrations 001–009
+php database/migrate.php   # schema, migrations up to wherever seed data is first needed
 php database/seed.php      # official MK chart of accounts — later migrations need this data
-php database/migrate.php   # remaining migrations (010+) that reference specific account codes
+php database/migrate.php   # remaining migrations that reference specific account codes
 ```
 
-That three-step order matters on a genuinely fresh database: several migrations from 010 onward look up accounts by code (`SELECT id FROM accounts WHERE code = '120'`), which only exist after `seed.php` runs. `database/migrate.php` and `database/seed.php` are both safe to re-run any time afterward — migrations skip anything already applied, and the seed skips codes that already exist.
+That three-step order matters on a genuinely fresh database: several migrations look up accounts by code (`SELECT id FROM accounts WHERE code = '120'`), which only exist after `seed.php` runs — the first `migrate.php` call will simply stop with an error at whichever migration hits this first; that's expected, run `seed.php` then `migrate.php` again to finish. `database/migrate.php` and `database/seed.php` are both safe to re-run any time afterward — migrations skip anything already applied, and the seed skips codes that already exist.
 
-Then in cPanel: **Domains → (your domain) → Document Root** → set it to
-`/home/yourcpaneluser/fintech-app/public`. If cPanel won't let you point a
-domain's document root outside `public_html`, use a symlink instead:
-`rm -rf ~/public_html && ln -s ~/fintech-app/public ~/public_html` (only if
-`public_html` is otherwise empty — back it up first if not).
+**Document root:** cPanel → **Domains → (your domain) → Document Root** → set
+it to `/home/yourcpaneluser/fintech-app/public`. **This often isn't available
+for the account's primary domain** (cPanel restricts it to addon
+domains/subdomains on many setups) — if so, use this instead, which
+preserves `cgi-bin`, `.well-known` (AutoSSL needs this — never delete it),
+and cPanel's own PHP-version `.htaccess` block:
+
+```bash
+cd ~/public_html
+ln -s ~/fintech-app/public/index.php index.php
+ln -s ~/fintech-app/public/assets assets
+cat >> .htaccess << 'EOF'
+
+RewriteEngine On
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^ index.php [L]
+EOF
+```
+
+The symlinks mean future deploys (which update `~/fintech-app`) are picked
+up automatically — nothing to re-copy into `public_html`. (`public/.htaccess`
+in the repo already has the same rewrite rule, for the case where the
+document-root approach *is* available and Apache/LiteSpeed reads it directly
+from there instead.)
 
 `.env` is gitignored and never touched by the deploy workflow (`git reset
 --hard` only affects tracked files) — editing it again later is a manual SSH
@@ -90,6 +116,27 @@ design, it only applies migrations not yet recorded as run (see
 `database/migrate.php`), so a deploy with no new migration is a no-op there.
 
 ---
+
+## Troubleshooting
+
+- **`migrate.php`/`seed.php` print nothing and exit non-zero:** production
+  PHP configs usually have `display_errors` off, so fatal errors are
+  swallowed silently. Re-run with `php -d display_errors=1 database/migrate.php`
+  to see the real message.
+- **cPanel's browser-based Terminal mangles multi-line pasted commands**
+  (`Unsuccessful stat on filename containing newline` or similar): collapse
+  the command to a single line before pasting.
+- **SSH key rejected, falls straight through to a password prompt** even
+  after importing + authorizing it in cPanel's SSH Access page: this
+  happened on this host (parsicek.si/NeoServ) and was never fully root-caused
+  from outside — the account's SSH access needed a separate "activation"
+  step in the **My NEOSERV** client portal (distinct from the cPanel key UI)
+  before *any* SSH auth worked, key or password. If you hit this, check that
+  first before assuming the key itself is wrong.
+- **Repeated failed SSH attempts get your IP firewalled** (`Connection
+  closed` with no auth prompt at all): CSF/fail2ban-style protection,
+  common on CloudLinux cPanel boxes. Wait 15–30 min, or ask host support to
+  unblock the IP.
 
 ## What this deliberately doesn't do
 
