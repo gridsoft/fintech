@@ -1,0 +1,8 @@
+RewriteEngine On
+
+# Real files/folders (assets, etc.) are served as-is; everything else
+# routes through the single front controller, matching how the local PHP
+# dev server already behaves (php -S routes every request to index.php).
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^ index.php [L]
