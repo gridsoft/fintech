@@ -30,16 +30,21 @@ foreach ($files as $file) {
 
     $sql = file_get_contents($file);
 
-    $pdo->beginTransaction();
+    // Без PDO транзакција намерно — MySQL/MariaDB имплицитно комитира на
+    // секој DDL (CREATE/ALTER/DROP TABLE), што ја невалидира секоја
+    // отворена транзакција веднаш штом migration-от изврши DDL (а речиси
+    // сите содржат DDL). Обвиткување во beginTransaction()/commit() тогаш
+    // не дава реална сигурност (не може да се rollback-ира веќе-комитиран
+    // DDL) и на некои верзии/конфигурации на MySQL commit()/rollBack() над
+    // веќе-невалидирана транзакција самите фрлаат исклучок, маскирајќи ја
+    // вистинската грешка. Затоа: прост exec, реална грешка при пад.
     try {
         $pdo->exec($sql);
         $stmt = $pdo->prepare('INSERT INTO migrations (migration) VALUES (?)');
         $stmt->execute([$name]);
-        $pdo->commit();
         echo "Применета: $name\n";
         $ran++;
     } catch (Throwable $e) {
-        $pdo->rollBack();
         fwrite(STDERR, "Грешка во $name: {$e->getMessage()}\n");
         exit(1);
     }
