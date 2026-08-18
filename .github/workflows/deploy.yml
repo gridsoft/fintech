@@ -9,17 +9,31 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy over SSH
-        uses: appleboy/ssh-action@v1.0.3
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
         with:
-          host: ${{ secrets.CPANEL_HOST }}
-          port: ${{ secrets.CPANEL_SSH_PORT }}
-          username: ${{ secrets.CPANEL_SSH_USER }}
-          key: ${{ secrets.CPANEL_SSH_KEY }}
-          script_stop: true
-          script: |
-            cd ${{ secrets.CPANEL_DEPLOY_PATH }}
-            git fetch origin master
-            git reset --hard origin/master
-            composer install --no-dev --optimize-autoloader --no-interaction
-            php database/migrate.php
+          php-version: '8.3'
+          tools: composer
+
+      - name: Install dependencies
+        run: composer install --no-dev --optimize-autoloader --no-interaction
+
+      - name: FTP deploy
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_HOST }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          server-dir: ${{ secrets.FTP_SERVER_DIR }}
+          # Никогаш не го допира .env на серверот (реални DB credentials,
+          # никогаш во репото) — FTP само upload-ира/презапишува код, не
+          # брише файлови отсутни локално (без --dangerous-clean-slate).
+          # database/migrations/ НАМЕРНО се качува — нова migration стигнува
+          # преку FTP исто како секој друг код фајл; се извршува рачно
+          # преку SSH (php database/migrate.php) кога е потребно, без
+          # претходен git pull.
+          exclude: |
+            **/.git*
+            **/.git*/**
+            .env
