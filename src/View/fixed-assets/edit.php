@@ -20,7 +20,7 @@
             </div>
             <div class="mb-3 text-muted small">
                 Набавна вредност (<?= number_format((float) $asset->purchaseValue, 2) ?>), датум на набавка
-                (<?= htmlspecialchars($asset->purchaseDate) ?>) и конто се замрзнати од изворната влезна
+                (<?= htmlspecialchars(\App\Core\Dates::formatMk($asset->purchaseDate)) ?>) и конто се замрзнати од изворната влезна
                 фактура — не се уредливи тука.
             </div>
             <button type="submit" class="btn btn-primary">Зачувај</button>

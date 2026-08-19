@@ -1,6 +1,6 @@
 <div class="d-flex justify-content-between align-items-start mb-3">
     <div>
-        <h5 class="mb-1">Извод <?= htmlspecialchars($statement->date) ?><?php if ($statementCurrency && $statement->currencyId !== $baseCurrencyId): ?> <span class="badge text-bg-info-subtle text-info-emphasis"><?= htmlspecialchars($statementCurrency->code) ?></span><?php endif; ?></h5>
+        <h5 class="mb-1">Извод <?= htmlspecialchars(\App\Core\Dates::formatMk($statement->date)) ?><?php if ($statementCurrency && $statement->currencyId !== $baseCurrencyId): ?> <span class="badge text-bg-info-subtle text-info-emphasis"><?= htmlspecialchars($statementCurrency->code) ?></span><?php endif; ?></h5>
         <div class="text-muted"><?= $account ? htmlspecialchars($account->code . ' — ' . $account->name) : '—' ?></div>
         <div class="text-muted">Почетно салдо: <?= number_format((float) $statement->openingBalance, 2) ?><?= $statementCurrency ? ' ' . htmlspecialchars($statementCurrency->code) : '' ?></div>
         <?php if ($statement->reference): ?><div class="text-muted">Референца: <?= htmlspecialchars($statement->reference) ?></div><?php endif; ?>
@@ -41,7 +41,7 @@
                         $glAccount = $transaction->glAccountId ? ($accountsById[$transaction->glAccountId] ?? null) : null;
                     ?>
                     <tr>
-                        <td><?= htmlspecialchars($transaction->date) ?></td>
+                        <td data-order="<?= htmlspecialchars($transaction->date) ?>"><?= htmlspecialchars(\App\Core\Dates::formatMk($transaction->date)) ?></td>
                         <td class="text-muted"><?= htmlspecialchars($transaction->description ?? '') ?></td>
                         <td class="text-muted"><?= htmlspecialchars($transaction->code ?? '') ?></td>
                         <td><?= $partner ? htmlspecialchars($partner->name) : '—' ?></td>
@@ -246,7 +246,7 @@
                     </div>
                     <div class="modal-body">
                         <div class="row mb-3">
-                            <div class="col-md-4"><strong>Датум:</strong> <?= htmlspecialchars($transaction->date) ?></div>
+                            <div class="col-md-4"><strong>Датум:</strong> <?= htmlspecialchars(\App\Core\Dates::formatMk($transaction->date)) ?></div>
                             <div class="col-md-4"><strong>Насока:</strong> <?= htmlspecialchars($transaction->directionLabel()) ?></div>
                             <div class="col-md-4"><strong>Износ:</strong> <?= number_format((float) $transaction->amount, 2) ?></div>
                         </div>
@@ -283,7 +283,7 @@
                                             <tr>
                                                 <td><input type="radio" name="invoice_pick" value="sales:<?= $invoice->id ?>" data-foreign="<?= $invoice->currencyId !== $baseCurrencyId ? '1' : '0' ?>" required></td>
                                                 <td class="fw-semibold"><?= htmlspecialchars($invoice->number) ?></td>
-                                                <td><?= htmlspecialchars($invoice->date) ?></td>
+                                                <td><?= htmlspecialchars(\App\Core\Dates::formatMk($invoice->date)) ?></td>
                                                 <td class="text-end"><?= number_format((float) $invoice->totalGross, 2) ?></td>
                                                 <td class="text-end"><?= number_format((float) $md['outstandingByInvoiceId']['sales_' . $invoice->id], 2) ?></td>
                                             </tr>
@@ -293,7 +293,7 @@
                                             <tr>
                                                 <td><input type="radio" name="invoice_pick" value="purchase:<?= $invoice->id ?>" data-foreign="<?= $invoice->currencyId !== $baseCurrencyId ? '1' : '0' ?>" required></td>
                                                 <td class="fw-semibold"><?= htmlspecialchars($invoice->supplierNumber) ?></td>
-                                                <td><?= htmlspecialchars($invoice->date) ?></td>
+                                                <td><?= htmlspecialchars(\App\Core\Dates::formatMk($invoice->date)) ?></td>
                                                 <td class="text-end"><?= number_format((float) $invoice->totalGross, 2) ?></td>
                                                 <td class="text-end"><?= number_format((float) $md['outstandingByInvoiceId']['purchase_' . $invoice->id], 2) ?></td>
                                             </tr>
@@ -357,7 +357,7 @@ foreach ($openSalesInvoicesByPartner as $partnerId => $invoices) {
             'type' => 'sales',
             'id' => $invoice['id'],
             'number' => $invoice['number'],
-            'date' => $invoice['date'],
+            'date' => \App\Core\Dates::formatMk($invoice['date']),
             'outstanding' => $invoice['outstanding'],
             'isForeignCurrency' => $invoice['isForeignCurrency'],
         ];
@@ -369,7 +369,7 @@ foreach ($openPurchaseInvoicesByPartner as $partnerId => $invoices) {
             'type' => 'purchase',
             'id' => $invoice['id'],
             'number' => $invoice['number'],
-            'date' => $invoice['date'],
+            'date' => \App\Core\Dates::formatMk($invoice['date']),
             'outstanding' => $invoice['outstanding'],
             'isForeignCurrency' => $invoice['isForeignCurrency'],
         ];

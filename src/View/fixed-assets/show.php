@@ -19,7 +19,7 @@
     <div class="col-md-3">
         <div class="card"><div class="card-body">
             <div class="text-muted small">Датум на набавка</div>
-            <div class="fw-semibold"><?= htmlspecialchars($asset->purchaseDate) ?></div>
+            <div class="fw-semibold"><?= htmlspecialchars(\App\Core\Dates::formatMk($asset->purchaseDate)) ?></div>
         </div></div>
     </div>
     <div class="col-md-3">
@@ -61,7 +61,7 @@
                 <?php endif; ?>
                 <?php foreach ($entries as $entry): ?>
                     <tr>
-                        <td><?= htmlspecialchars($entry->periodDate) ?></td>
+                        <td><?= htmlspecialchars(\App\Core\Dates::formatMk($entry->periodDate)) ?></td>
                         <td class="text-end"><?= number_format((float) $entry->amount, 2) ?></td>
                         <td><a href="/journal/<?= $entry->journalEntryId ?>">#<?= $entry->journalEntryId ?></a></td>
                     </tr>

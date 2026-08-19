@@ -12,6 +12,7 @@ use App\Repository\ProductCategoryRepository;
 use App\Repository\ProductRepository;
 use App\Repository\VatRateRepository;
 use App\Service\InvoiceService;
+use App\Service\PaymentMatchingService;
 use InvalidArgumentException;
 use PDO;
 use PHPUnit\Framework\TestCase;
@@ -194,5 +195,131 @@ class InvoiceServiceTest extends TestCase
         $this->expectException(InvalidArgumentException::class);
 
         $this->service->createInvoice($this->partnerId, '2026-01-01', '2026-01-31', []);
+    }
+
+    public function test_it_can_edit_a_draft_invoice_replacing_lines_and_totals(): void
+    {
+        $invoiceId = $this->service->createInvoice($this->partnerId, '2026-01-01', '2026-01-31', [
+            ['type' => 'product', 'item_id' => $this->productId, 'quantity' => '1'],
+        ]);
+        $this->createdInvoiceIds[] = $invoiceId;
+
+        $this->service->updateInvoice($invoiceId, $this->partnerId, '2026-02-01', '2026-02-28', [
+            ['type' => 'product', 'item_id' => $this->productId, 'quantity' => '3'],
+        ]);
+
+        $invoice = $this->invoices->find($invoiceId);
+
+        $this->assertSame('2026-02-01', $invoice->date);
+        $this->assertSame('2026-02-28', $invoice->dueDate);
+        $this->assertCount(1, $invoice->lines);
+        // 3 * 1000 = 3000 нето, наместо 1000 претходно — старите линии реално се заменети, не додадени
+        $this->assertSame('3000.00', $invoice->totalNet);
+        $this->assertSame('3540.00', $invoice->totalGross);
+    }
+
+    public function test_it_refuses_to_edit_a_paid_or_cancelled_invoice(): void
+    {
+        $invoiceId = $this->service->createInvoice($this->partnerId, '2026-01-01', '2026-01-31', [
+            ['type' => 'product', 'item_id' => $this->productId, 'quantity' => '1'],
+        ]);
+        $this->createdInvoiceIds[] = $invoiceId;
+        $this->service->issue($invoiceId);
+        $this->createdEntryIds[] = $this->invoices->find($invoiceId)->journalEntryId;
+        $this->service->markPaid($invoiceId);
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessageMatches('/Само нацрт или издадена/');
+
+        $this->service->updateInvoice($invoiceId, $this->partnerId, '2026-02-01', '2026-02-28', [
+            ['type' => 'product', 'item_id' => $this->productId, 'quantity' => '5'],
+        ]);
+    }
+
+    public function test_it_can_edit_an_issued_invoice_when_nothing_is_matched_yet_and_reposts_the_journal(): void
+    {
+        $invoiceId = $this->service->createInvoice($this->partnerId, '2026-01-01', '2026-01-31', [
+            ['type' => 'product', 'item_id' => $this->productId, 'quantity' => '1'],
+        ]);
+        $this->createdInvoiceIds[] = $invoiceId;
+        $this->service->issue($invoiceId);
+        $originalEntryId = $this->invoices->find($invoiceId)->journalEntryId;
+        $this->createdEntryIds[] = $originalEntryId;
+
+        $this->service->updateInvoice($invoiceId, $this->partnerId, '2026-01-05', '2026-02-04', [
+            ['type' => 'product', 'item_id' => $this->productId, 'quantity' => '4'],
+        ]);
+
+        $invoice = $this->invoices->find($invoiceId);
+        $this->createdEntryIds[] = $invoice->journalEntryId;
+
+        // Останува издадена, но со нов journal_entry_id — стариот запис не е избришан (само сторниран).
+        $this->assertSame('issued', $invoice->status);
+        $this->assertNotSame($originalEntryId, $invoice->journalEntryId);
+        // 4 * 1000 = 4000 нето, 18% ддв = 720
+        $this->assertSame('4000.00', $invoice->totalNet);
+        $this->assertSame('4720.00', $invoice->totalGross);
+
+        // Стариот запис сепак постои и е точно сторниран (дебит/кредит заменети со оригиналот) — не е избришан.
+        $stmt = $this->db->prepare('SELECT COALESCE(SUM(debit),0) d, COALESCE(SUM(credit),0) c FROM journal_lines WHERE journal_entry_id = ?');
+        $stmt->execute([$originalEntryId]);
+        $original = $stmt->fetch();
+        $this->assertEquals(1180.00, (float) $original['d']); // 1 * 1000 + 18% = 1180, непроменето
+
+        // Новиот запис е балансиран и одразува 4720
+        $stmt = $this->db->prepare('SELECT COALESCE(SUM(debit),0) d, COALESCE(SUM(credit),0) c FROM journal_lines WHERE journal_entry_id = ?');
+        $stmt->execute([$invoice->journalEntryId]);
+        $new = $stmt->fetch();
+        $this->assertEquals(4720.00, (float) $new['d']);
+        $this->assertEquals(4720.00, (float) $new['c']);
+    }
+
+    public function test_it_refuses_to_edit_an_issued_invoice_once_a_payment_is_matched(): void
+    {
+        $invoiceId = $this->service->createInvoice($this->partnerId, '2026-01-01', '2026-01-31', [
+            ['type' => 'product', 'item_id' => $this->productId, 'quantity' => '1'],
+        ]);
+        $this->createdInvoiceIds[] = $invoiceId;
+        $this->service->issue($invoiceId);
+        $this->createdEntryIds[] = $this->invoices->find($invoiceId)->journalEntryId;
+
+        $accounts = new AccountRepository();
+        $cashAccount = $accounts->findByCode('221');
+        $matching = new PaymentMatchingService();
+        $statementId = $matching->createStatement($cashAccount->id, '2026-01-10', 'SMOKE');
+        $txId = $matching->addTransaction($statementId, '2026-01-10', 'уплата', null, '500.00', 'in', $this->partnerId, $cashAccount->id);
+        $matching->matchToSalesInvoice($txId, $invoiceId, $cashAccount->id);
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessageMatches('/поврзана банкарска трансакција/');
+
+        try {
+            $this->service->updateInvoice($invoiceId, $this->partnerId, '2026-02-01', '2026-02-28', [
+                ['type' => 'product', 'item_id' => $this->productId, 'quantity' => '5'],
+            ]);
+        } finally {
+            $this->db->prepare('DELETE FROM journal_lines WHERE journal_entry_id IN (SELECT journal_entry_id FROM bank_transactions WHERE id = ?)')->execute([$txId]);
+            $this->db->prepare('DELETE FROM journal_entries WHERE id IN (SELECT journal_entry_id FROM bank_transactions WHERE id = ?)')->execute([$txId]);
+            $this->db->prepare('DELETE FROM bank_transactions WHERE id = ?')->execute([$txId]);
+            $this->db->prepare('DELETE FROM bank_statements WHERE id = ?')->execute([$statementId]);
+        }
+    }
+
+    public function test_it_refuses_to_edit_an_invoice_already_sent_as_einvoice(): void
+    {
+        $invoiceId = $this->service->createInvoice($this->partnerId, '2026-01-01', '2026-01-31', [
+            ['type' => 'product', 'item_id' => $this->productId, 'quantity' => '1'],
+        ]);
+        $this->createdInvoiceIds[] = $invoiceId;
+        $this->service->issue($invoiceId);
+        $this->createdEntryIds[] = $this->invoices->find($invoiceId)->journalEntryId;
+        $this->invoices->recordEinvoiceSent($invoiceId, 'test-euid-123');
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessageMatches('/регистрирана кај даночната управа/');
+
+        $this->service->updateInvoice($invoiceId, $this->partnerId, '2026-02-01', '2026-02-28', [
+            ['type' => 'product', 'item_id' => $this->productId, 'quantity' => '5'],
+        ]);
     }
 }

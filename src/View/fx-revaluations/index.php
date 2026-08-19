@@ -93,7 +93,7 @@
                 <?php foreach ($history as $revaluation): ?>
                     <?php $currency = $currenciesById[$revaluation->currencyId] ?? null; ?>
                     <tr>
-                        <td><?= htmlspecialchars($revaluation->date) ?></td>
+                        <td data-order="<?= htmlspecialchars($revaluation->date) ?>"><?= htmlspecialchars(\App\Core\Dates::formatMk($revaluation->date)) ?></td>
                         <td><?= $currency ? htmlspecialchars($currency->code) : '—' ?></td>
                         <td class="text-end"><?= htmlspecialchars($revaluation->newRate) ?></td>
                         <td>

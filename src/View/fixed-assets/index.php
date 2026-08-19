@@ -36,7 +36,7 @@
                     <tr class="cursor-pointer" onclick="location.href='/fixed-assets/<?= $asset->id ?>'" style="cursor:pointer;">
                         <td class="fw-semibold"><?= htmlspecialchars($asset->name) ?></td>
                         <td class="text-muted small"><?= $account ? htmlspecialchars($account->code . ' — ' . $account->name) : '—' ?></td>
-                        <td><?= htmlspecialchars($asset->purchaseDate) ?></td>
+                        <td data-order="<?= htmlspecialchars($asset->purchaseDate) ?>"><?= htmlspecialchars(\App\Core\Dates::formatMk($asset->purchaseDate)) ?></td>
                         <td class="text-end"><?= number_format((float) $asset->purchaseValue, 2) ?></td>
                         <td class="text-end"><?= number_format((float) $accumulated, 2) ?></td>
                         <td class="text-end fw-semibold"><?= number_format((float) $bookValue, 2) ?></td>

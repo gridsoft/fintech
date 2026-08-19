@@ -23,7 +23,7 @@
                 <?php endif; ?>
                 <?php foreach ($rows as $row): ?>
                     <tr class="cursor-pointer" onclick="location.href='/journal/<?= $row['entry']->id ?>'" style="cursor:pointer;">
-                        <td><?= htmlspecialchars($row['entry']->date) ?></td>
+                        <td data-order="<?= htmlspecialchars($row['entry']->date) ?>"><?= htmlspecialchars(\App\Core\Dates::formatMk($row['entry']->date)) ?></td>
                         <td><?= htmlspecialchars($row['account_code'] . ' — ' . $row['account_name']) ?></td>
                         <td>
                             <?= htmlspecialchars($row['entry']->description) ?>

@@ -1,7 +1,7 @@
 <div class="card mb-3">
     <div class="card-body">
         <div class="row">
-            <div class="col-md-3"><strong>Датум:</strong> <?= htmlspecialchars($entry->date) ?></div>
+            <div class="col-md-3"><strong>Датум:</strong> <?= htmlspecialchars(\App\Core\Dates::formatMk($entry->date)) ?></div>
             <div class="col-md-6"><strong>Опис:</strong> <?= htmlspecialchars($entry->description) ?></div>
             <div class="col-md-3"><strong>Референца:</strong> <?= htmlspecialchars($entry->reference ?? '—') ?></div>
         </div>

@@ -68,6 +68,15 @@ class FixedAssetRepository
         $stmt->execute([$asset->name, $asset->annualRate, $asset->id]);
     }
 
+    /** Дали влезната фактура веќе создаде основно средство — уредување по ова е блокирано (вредноста е замрзната на средството). */
+    public function existsForPurchaseInvoice(int $purchaseInvoiceId): bool
+    {
+        $stmt = $this->db->prepare('SELECT COUNT(*) FROM fixed_assets WHERE purchase_invoice_id = ?');
+        $stmt->execute([$purchaseInvoiceId]);
+
+        return (int) $stmt->fetchColumn() > 0;
+    }
+
     /** Веќе амортизирано до сега — SUM од сите записи, нема посебно чувано поле (исто како преостанато салдо на фактура). */
     public function accumulatedDepreciation(int $fixedAssetId): string
     {

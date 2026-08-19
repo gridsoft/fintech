@@ -77,10 +77,18 @@ class PurchaseInvoiceRepository
         return $stmt->fetchAll();
     }
 
-    public function existsForPartnerAndNumber(int $partnerId, string $supplierNumber): bool
+    public function existsForPartnerAndNumber(int $partnerId, string $supplierNumber, ?int $excludeId = null): bool
     {
-        $stmt = $this->db->prepare('SELECT COUNT(*) FROM purchase_invoices WHERE partner_id = ? AND supplier_number = ?');
-        $stmt->execute([$partnerId, $supplierNumber]);
+        $sql = 'SELECT COUNT(*) FROM purchase_invoices WHERE partner_id = ? AND supplier_number = ?';
+        $params = [$partnerId, $supplierNumber];
+
+        if ($excludeId !== null) {
+            $sql .= ' AND id != ?';
+            $params[] = $excludeId;
+        }
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($params);
 
         return (int) $stmt->fetchColumn() > 0;
     }
@@ -135,6 +143,30 @@ class PurchaseInvoiceRepository
         ]);
 
         return (int) $this->db->lastInsertId();
+    }
+
+    public function updateHeader(
+        int $id,
+        int $partnerId,
+        string $supplierNumber,
+        string $date,
+        string $dueDate,
+        int $currencyId,
+        string $exchangeRate,
+        string $totalNet,
+        string $totalVat,
+        string $totalGross
+    ): void {
+        $stmt = $this->db->prepare(
+            'UPDATE purchase_invoices SET partner_id = ?, supplier_number = ?, invoice_date = ?, due_date = ?, currency_id = ?, exchange_rate = ?, total_net = ?, total_vat = ?, total_gross = ? WHERE id = ?'
+        );
+        $stmt->execute([$partnerId, $supplierNumber, $date, $dueDate, $currencyId, $exchangeRate, $totalNet, $totalVat, $totalGross, $id]);
+    }
+
+    public function deleteLines(int $purchaseInvoiceId): void
+    {
+        $stmt = $this->db->prepare('DELETE FROM purchase_invoice_lines WHERE purchase_invoice_id = ?');
+        $stmt->execute([$purchaseInvoiceId]);
     }
 
     public function updateStatus(int $id, string $status): void

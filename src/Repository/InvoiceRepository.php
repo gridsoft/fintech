@@ -143,6 +143,29 @@ class InvoiceRepository
         return (int) $this->db->lastInsertId();
     }
 
+    public function updateHeader(
+        int $id,
+        int $partnerId,
+        string $date,
+        string $dueDate,
+        int $currencyId,
+        string $exchangeRate,
+        string $totalNet,
+        string $totalVat,
+        string $totalGross
+    ): void {
+        $stmt = $this->db->prepare(
+            'UPDATE invoices SET partner_id = ?, invoice_date = ?, due_date = ?, currency_id = ?, exchange_rate = ?, total_net = ?, total_vat = ?, total_gross = ? WHERE id = ?'
+        );
+        $stmt->execute([$partnerId, $date, $dueDate, $currencyId, $exchangeRate, $totalNet, $totalVat, $totalGross, $id]);
+    }
+
+    public function deleteLines(int $invoiceId): void
+    {
+        $stmt = $this->db->prepare('DELETE FROM invoice_lines WHERE invoice_id = ?');
+        $stmt->execute([$invoiceId]);
+    }
+
     public function updateStatus(int $id, string $status): void
     {
         $stmt = $this->db->prepare('UPDATE invoices SET status = ? WHERE id = ?');

@@ -15,6 +15,9 @@ $badgeClass = [
         <?php endif; ?>
     </div>
     <div class="d-flex align-items-start gap-2">
+        <?php if (in_array($invoice->status, ['draft', 'posted'], true)): ?>
+            <a href="/purchase-invoices/<?= $invoice->id ?>/edit" class="btn btn-outline-primary btn-sm">Уреди</a>
+        <?php endif; ?>
         <?php if ($invoice->status === 'draft'): ?>
             <form action="/purchase-invoices/<?= $invoice->id ?>/post" method="post" class="d-inline"
                   onsubmit="return confirm('Да се заведе фактурата? Ова автоматски ќе создаде книжење во главната книга.');">
@@ -38,8 +41,8 @@ $badgeClass = [
         <div class="row mb-4">
             <div class="col-6">
                 <h5 class="mb-1">Влезна фактура <?= htmlspecialchars($invoice->supplierNumber) ?></h5>
-                <div class="text-muted">Датум: <?= htmlspecialchars($invoice->date) ?></div>
-                <div class="text-muted">Рок на плаќање: <?= htmlspecialchars($invoice->dueDate) ?></div>
+                <div class="text-muted">Датум: <?= htmlspecialchars(\App\Core\Dates::formatMk($invoice->date)) ?></div>
+                <div class="text-muted">Рок на плаќање: <?= htmlspecialchars(\App\Core\Dates::formatMk($invoice->dueDate)) ?></div>
                 <?php if ($currency && !$currency->isBase): ?>
                     <div class="text-muted">Валута: <?= htmlspecialchars($currency->code) ?>, курс <?= htmlspecialchars($invoice->exchangeRate) ?></div>
                 <?php endif; ?>

@@ -28,7 +28,7 @@ $renderTable = function (string $title, array $rows) use ($partnersById, $applyD
                             $md = $applyData[$transaction->id] ?? null;
                         ?>
                         <tr>
-                            <td><?= htmlspecialchars($transaction->date) ?></td>
+                            <td><?= htmlspecialchars(\App\Core\Dates::formatMk($transaction->date)) ?></td>
                             <td><?= $partner ? htmlspecialchars($partner->name) : '—' ?></td>
                             <td class="text-end"><?= number_format((float) $transaction->amount, 2) ?></td>
                             <td class="text-end fw-semibold"><?= number_format((float) $remaining, 2) ?></td>
@@ -77,7 +77,7 @@ $renderTable('Дадени аванси (на добавувачи)', $given);
                     </div>
                     <div class="modal-body">
                         <div class="row mb-3">
-                            <div class="col-md-6"><strong>Датум на аванс:</strong> <?= htmlspecialchars($transaction->date) ?></div>
+                            <div class="col-md-6"><strong>Датум на аванс:</strong> <?= htmlspecialchars(\App\Core\Dates::formatMk($transaction->date)) ?></div>
                             <div class="col-md-6"><strong>Преостанато на авансот:</strong> <?= number_format((float) $remaining, 2) ?></div>
                         </div>
 
@@ -108,7 +108,7 @@ $renderTable('Дадени аванси (на добавувачи)', $given);
                                         <tr>
                                             <td><input type="radio" name="invoice_id" value="<?= $invoice->id ?>" data-outstanding="<?= htmlspecialchars($md['outstandingByInvoiceId'][$invoice->id]) ?>" required></td>
                                             <td class="fw-semibold"><?= htmlspecialchars($number) ?></td>
-                                            <td><?= htmlspecialchars($invoice->date) ?></td>
+                                            <td><?= htmlspecialchars(\App\Core\Dates::formatMk($invoice->date)) ?></td>
                                             <td class="text-end"><?= number_format((float) $invoice->totalGross, 2) ?></td>
                                             <td class="text-end"><?= number_format((float) $md['outstandingByInvoiceId'][$invoice->id], 2) ?></td>
                                         </tr>

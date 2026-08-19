@@ -100,6 +100,31 @@ class LedgerService
         }
     }
 
+    /**
+     * Сторнира веќе постоечки запис — нов, целосно ист запис со заменети
+     * дебит/кредит на секоја линија (не бришење на оригиналот, за да остане
+     * ревизорска трага). Автоматски балансиран бидејќи е огледало на веќе
+     * балансиран запис.
+     */
+    public function reverseEntry(int $entryId, string $date, string $description, ?string $reference): int
+    {
+        $lines = $this->journal->linesForEntry($entryId);
+
+        if (!$lines) {
+            throw new InvalidArgumentException("Записот #$entryId нема ставки за сторнирање.");
+        }
+
+        $reversed = array_map(static fn ($line) => [
+            'account_id' => $line->accountId,
+            'partner_id' => $line->partnerId,
+            'debit' => $line->credit,
+            'credit' => $line->debit,
+            'description' => $description,
+        ], $lines);
+
+        return $this->postEntry($date, $description, $reference, $reversed);
+    }
+
     private function toDecimal($value): string
     {
         if ($value === '' || $value === null) {

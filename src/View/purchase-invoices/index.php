@@ -28,8 +28,8 @@
                     <tr class="cursor-pointer" onclick="location.href='/purchase-invoices/<?= $invoice->id ?>'" style="cursor:pointer;">
                         <td class="fw-semibold"><?= htmlspecialchars($invoice->supplierNumber) ?></td>
                         <td><?= $partner ? htmlspecialchars($partner->name) : '—' ?></td>
-                        <td><?= htmlspecialchars($invoice->date) ?></td>
-                        <td><?= htmlspecialchars($invoice->dueDate) ?></td>
+                        <td data-order="<?= htmlspecialchars($invoice->date) ?>"><?= htmlspecialchars(\App\Core\Dates::formatMk($invoice->date)) ?></td>
+                        <td data-order="<?= htmlspecialchars($invoice->dueDate) ?>"><?= htmlspecialchars(\App\Core\Dates::formatMk($invoice->dueDate)) ?></td>
                         <td>
                             <?php
                             $badgeClass = [

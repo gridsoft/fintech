@@ -23,7 +23,7 @@
                 <?php endif; ?>
                 <?php foreach ($entries as $entry): ?>
                     <tr class="cursor-pointer" onclick="location.href='/journal/<?= $entry->id ?>'" style="cursor:pointer;">
-                        <td><?= htmlspecialchars($entry->date) ?></td>
+                        <td data-order="<?= htmlspecialchars($entry->date) ?>"><?= htmlspecialchars(\App\Core\Dates::formatMk($entry->date)) ?></td>
                         <td><?= htmlspecialchars($entry->description) ?></td>
                         <td class="text-muted"><?= htmlspecialchars($entry->reference ?? '—') ?></td>
                         <td class="text-end"><?= number_format((float) $entry->total, 2) ?></td>

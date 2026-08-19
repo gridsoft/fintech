@@ -2,6 +2,12 @@
     <div class="alert alert-danger"><?= htmlspecialchars($errors['lines']) ?></div>
 <?php endif; ?>
 
+<?php if (!empty($repostWarning)): ?>
+    <div class="alert alert-warning">
+        Оваа фактура е веќе <strong>издадена</strong>. Зачувувањето ќе го сторнира постојното книжење и ќе книжи нов запис според изменетите ставки — стариот запис останува во главната книга (сторниран), не се брише.
+    </div>
+<?php endif; ?>
+
 <?php
 $itemOptions = function ($selectedValue = null) use ($products, $services) {
     ?>
@@ -39,7 +45,8 @@ $itemOptions = function ($selectedValue = null) use ($products, $services) {
 
 <div class="card">
     <div class="card-body">
-        <form method="post" action="/invoices">
+        <form method="post" action="<?= htmlspecialchars($formAction ?? '/invoices') ?>"
+              <?= !empty($repostWarning) ? 'onsubmit="return confirm(\'Да се зачуваат промените? Ова ќе го сторнира постојното книжење и ќе книжи нов запис.\');"' : '' ?>>
             <div class="row g-3 mb-3">
                 <div class="col-md-5">
                     <label for="partner_id" class="form-label">Партнер</label>
@@ -60,10 +67,11 @@ $itemOptions = function ($selectedValue = null) use ($products, $services) {
                     <?php if (isset($errors['date'])): ?><div class="invalid-feedback"><?= htmlspecialchars($errors['date']) ?></div><?php endif; ?>
                 </div>
                 <div class="col-md-4">
-                    <label for="due_date" class="form-label">Рок на плаќање</label>
-                    <input type="date" id="due_date" name="due_date" class="form-control <?= isset($errors['due_date']) ? 'is-invalid' : '' ?>"
-                           value="<?= htmlspecialchars($old['due_date']) ?>" required>
-                    <?php if (isset($errors['due_date'])): ?><div class="invalid-feedback"><?= htmlspecialchars($errors['due_date']) ?></div><?php endif; ?>
+                    <label for="due_days" class="form-label">Рок на плаќање (денови)</label>
+                    <input type="number" step="1" min="0" id="due_days" name="due_days" class="form-control <?= isset($errors['due_days']) ? 'is-invalid' : '' ?>"
+                           value="<?= htmlspecialchars($old['due_days'] ?? '15') ?>" required>
+                    <div class="form-text">Доспева на: <span id="due-date-preview">—</span></div>
+                    <?php if (isset($errors['due_days'])): ?><div class="invalid-feedback"><?= htmlspecialchars($errors['due_days']) ?></div><?php endif; ?>
                 </div>
             </div>
 
@@ -133,8 +141,8 @@ $itemOptions = function ($selectedValue = null) use ($products, $services) {
             </button>
 
             <div>
-                <button type="submit" class="btn btn-primary">Зачувај нацрт</button>
-                <a href="/invoices" class="btn btn-outline-secondary">Откажи</a>
+                <button type="submit" class="btn btn-primary"><?= htmlspecialchars($submitLabel ?? 'Зачувај нацрт') ?></button>
+                <a href="<?= htmlspecialchars($cancelUrl ?? '/invoices') ?>" class="btn btn-outline-secondary">Откажи</a>
             </div>
         </form>
     </div>
@@ -248,5 +256,30 @@ $itemOptions = function ($selectedValue = null) use ($products, $services) {
         applyDefaultRate();
     });
     syncExchangeRate();
+
+    // Прикажува "Доспева на: д.м.гггг" — чисто информативно, датумот сепак
+    // се пресметува на серверот (date + due_days) при зачувување.
+    var dateInput = document.getElementById('date');
+    var dueDaysInput = document.getElementById('due_days');
+    var dueDatePreview = document.getElementById('due-date-preview');
+
+    function updateDueDatePreview() {
+        var base = dateInput.value;
+        var days = parseInt(dueDaysInput.value, 10);
+        if (!base || isNaN(days)) {
+            dueDatePreview.textContent = '—';
+            return;
+        }
+        var parts = base.split('-').map(Number);
+        var d = new Date(parts[0], parts[1] - 1, parts[2]);
+        d.setDate(d.getDate() + days);
+        var dd = String(d.getDate()).padStart(2, '0');
+        var mm = String(d.getMonth() + 1).padStart(2, '0');
+        dueDatePreview.textContent = dd + '.' + mm + '.' + d.getFullYear();
+    }
+
+    dateInput.addEventListener('input', updateDueDatePreview);
+    dueDaysInput.addEventListener('input', updateDueDatePreview);
+    updateDueDatePreview();
 })();
 </script>

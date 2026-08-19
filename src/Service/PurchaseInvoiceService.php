@@ -5,9 +5,13 @@ namespace App\Service;
 use App\Core\Database;
 use App\Domain\Invoicing\PurchaseInvoice;
 use App\Domain\Invoicing\PurchaseInvoiceLine;
+use App\Domain\Partners\Partner;
 use App\Repository\AccountRepository;
+use App\Repository\AdvanceApplicationRepository;
+use App\Repository\BankTransactionRepository;
 use App\Repository\CurrencyRepository;
 use App\Repository\ExpenseCategoryRepository;
+use App\Repository\FixedAssetRepository;
 use App\Repository\PartnerRepository;
 use App\Repository\PurchaseInvoiceRepository;
 use App\Repository\VatRateRepository;
@@ -45,6 +49,9 @@ class PurchaseInvoiceService
     private CurrencyRepository $currencies;
     private LedgerService $ledger;
     private FixedAssetService $fixedAssets;
+    private BankTransactionRepository $bankTransactions;
+    private AdvanceApplicationRepository $advanceApplications;
+    private FixedAssetRepository $fixedAssetsRepository;
 
     public function __construct(
         ?PurchaseInvoiceRepository $invoices = null,
@@ -54,7 +61,10 @@ class PurchaseInvoiceService
         ?AccountRepository $accounts = null,
         ?LedgerService $ledger = null,
         ?FixedAssetService $fixedAssets = null,
-        ?CurrencyRepository $currencies = null
+        ?CurrencyRepository $currencies = null,
+        ?BankTransactionRepository $bankTransactions = null,
+        ?AdvanceApplicationRepository $advanceApplications = null,
+        ?FixedAssetRepository $fixedAssetsRepository = null
     ) {
         $this->db = Database::connection();
         $this->invoices = $invoices ?? new PurchaseInvoiceRepository();
@@ -65,6 +75,9 @@ class PurchaseInvoiceService
         $this->currencies = $currencies ?? new CurrencyRepository();
         $this->ledger = $ledger ?? new LedgerService();
         $this->fixedAssets = $fixedAssets ?? new FixedAssetService();
+        $this->bankTransactions = $bankTransactions ?? new BankTransactionRepository();
+        $this->advanceApplications = $advanceApplications ?? new AdvanceApplicationRepository();
+        $this->fixedAssetsRepository = $fixedAssetsRepository ?? new FixedAssetRepository();
     }
 
     /**
@@ -82,8 +95,100 @@ class PurchaseInvoiceService
      */
     public function createPurchaseInvoice(int $partnerId, string $supplierNumber, string $date, string $dueDate, array $lines, ?int $currencyId = null, string $exchangeRate = '1.000000'): int
     {
-        if (count($lines) < 1) {
-            throw new InvalidArgumentException('Фактурата мора да содржи барем 1 ставка.');
+        $supplierNumber = trim($supplierNumber);
+
+        if ($supplierNumber === '') {
+            throw new InvalidArgumentException('Бројот на фактурата од добавувачот е задолжителен.');
+        }
+
+        $partner = $this->partners->find($partnerId);
+
+        if (!$partner) {
+            throw new InvalidArgumentException('Партнерот не е пронајден.');
+        }
+
+        $currency = $this->resolveCurrency($currencyId, $exchangeRate);
+        $exchangeRate = $currency['exchangeRate'];
+        $currency = $currency['currency'];
+
+        if ($this->invoices->existsForPartnerAndNumber($partnerId, $supplierNumber)) {
+            throw new InvalidArgumentException("Веќе постои внесена фактура бр. „{$supplierNumber}“ од овој партнер.");
+        }
+
+        [$normalized, $totalNet, $totalVat] = $this->normalizeLines($lines, $partner);
+        $totalGross = round($totalNet + $totalVat, 2);
+
+        $this->db->beginTransaction();
+
+        try {
+            $invoice = new PurchaseInvoice(
+                $partnerId,
+                $supplierNumber,
+                $date,
+                $dueDate,
+                'draft',
+                number_format($totalNet, 2, '.', ''),
+                number_format($totalVat, 2, '.', ''),
+                number_format($totalGross, 2, '.', ''),
+                null,
+                null,
+                $currency->id,
+                $exchangeRate
+            );
+
+            $invoiceId = $this->invoices->create($invoice);
+
+            foreach ($normalized as $line) {
+                $this->invoices->insertLine(new PurchaseInvoiceLine(
+                    $line['expense_category_id'],
+                    $line['quantity'],
+                    $line['unit_price'],
+                    $line['account_id'],
+                    $line['vat_rate_id'],
+                    $line['vat_rate'],
+                    $line['line_total'],
+                    $line['description'],
+                    $invoiceId
+                ));
+            }
+
+            $this->db->commit();
+
+            return $invoiceId;
+        } catch (Throwable $e) {
+            $this->db->rollBack();
+            throw $e;
+        }
+    }
+
+    /**
+     * Уредува влезна фактура. Дозволено на `draft` (без ефект врз главната
+     * книга) И на `posted` (ама ТОГАШ задолжително прекнижува — сторнира
+     * старото книжење и книжи ново според изменетите линии, огледало на
+     * InvoiceService::updateInvoice(), исто образложение во DECISIONS.md).
+     * Заведена фактура е уредлива само ако сè уште нема НИШТО реално
+     * поврзано со неа: матчирана банкарска трансакција, применет аванс, или
+     * веќе создадено основно средство (вредноста таму е замрзната еднаш,
+     * прекнижувањето не би можело да ја усогласи) — assertEditablePostedInvoice().
+     *
+     * @param array<int, array{category_id: int, quantity: string|float, unit_price: string|float, vat_rate_id: int, description?: ?string}> $lines
+     */
+    public function updatePurchaseInvoice(int $invoiceId, int $partnerId, string $supplierNumber, string $date, string $dueDate, array $lines, ?int $currencyId = null, string $exchangeRate = '1.000000'): void
+    {
+        $invoice = $this->invoices->find($invoiceId);
+
+        if (!$invoice) {
+            throw new InvalidArgumentException('Фактурата не е пронајдена.');
+        }
+
+        if (!in_array($invoice->status, ['draft', 'posted'], true)) {
+            throw new RuntimeException('Само нацрт или заведена фактура може да се уредува (платена/откажана — не).');
+        }
+
+        $wasPosted = $invoice->status === 'posted';
+
+        if ($wasPosted) {
+            $this->assertEditablePostedInvoice($invoice);
         }
 
         $supplierNumber = trim($supplierNumber);
@@ -98,6 +203,129 @@ class PurchaseInvoiceService
             throw new InvalidArgumentException('Партнерот не е пронајден.');
         }
 
+        $currency = $this->resolveCurrency($currencyId, $exchangeRate);
+        $exchangeRate = $currency['exchangeRate'];
+        $currency = $currency['currency'];
+
+        if ($this->invoices->existsForPartnerAndNumber($partnerId, $supplierNumber, $invoiceId)) {
+            throw new InvalidArgumentException("Веќе постои внесена фактура бр. „{$supplierNumber}“ од овој партнер.");
+        }
+
+        [$normalized, $totalNet, $totalVat] = $this->normalizeLines($lines, $partner);
+        $totalGross = round($totalNet + $totalVat, 2);
+
+        $this->db->beginTransaction();
+
+        try {
+            $this->invoices->updateHeader(
+                $invoiceId,
+                $partnerId,
+                $supplierNumber,
+                $date,
+                $dueDate,
+                $currency->id,
+                $exchangeRate,
+                number_format($totalNet, 2, '.', ''),
+                number_format($totalVat, 2, '.', ''),
+                number_format($totalGross, 2, '.', '')
+            );
+
+            $this->invoices->deleteLines($invoiceId);
+
+            foreach ($normalized as $line) {
+                $this->invoices->insertLine(new PurchaseInvoiceLine(
+                    $line['expense_category_id'],
+                    $line['quantity'],
+                    $line['unit_price'],
+                    $line['account_id'],
+                    $line['vat_rate_id'],
+                    $line['vat_rate'],
+                    $line['line_total'],
+                    $line['description'],
+                    $invoiceId
+                ));
+            }
+
+            $this->db->commit();
+        } catch (Throwable $e) {
+            $this->db->rollBack();
+            throw $e;
+        }
+
+        // Исто ограничување како InvoiceService::updateInvoice(): reverseEntry()/
+        // postEntry() секој управува со сопствена транзакција, не вгнездени
+        // во горната — веќе прифатено од post() (postEntry па markPosted/
+        // fixedAssets како засебни чекори), не ново овде.
+        if ($wasPosted) {
+            if ($invoice->journalEntryId) {
+                $this->ledger->reverseEntry(
+                    $invoice->journalEntryId,
+                    $invoice->date,
+                    "Сторно пред уредување на влезна фактура {$invoice->supplierNumber}",
+                    $invoice->supplierNumber
+                );
+            }
+
+            $refreshed = $this->invoices->find($invoiceId);
+            [$journalLines, $capitalizableLines] = $this->buildPostingPlan($refreshed, $partner);
+
+            $newEntryId = $this->ledger->postEntry(
+                $refreshed->date,
+                "Влезна фактура {$refreshed->supplierNumber}",
+                $refreshed->supplierNumber,
+                $journalLines
+            );
+            $this->invoices->markPosted($invoiceId, $newEntryId);
+
+            foreach ($capitalizableLines as $capitalizable) {
+                $this->fixedAssets->createFromPurchaseInvoiceLine(
+                    $invoiceId,
+                    $refreshed->supplierNumber,
+                    $capitalizable['line'],
+                    $capitalizable['category'],
+                    $refreshed->date,
+                    $refreshed->exchangeRate
+                );
+            }
+        }
+    }
+
+    /**
+     * Причината зошто веќе заведена фактура НЕ може да се уредува, или null
+     * ако може — јавно, за контролерот да провери и на GET /edit (пред да
+     * прикаже форма што секако би отпаднала на зачувување). Секоја причина е
+     * реална последица што прекнижувањето не би можело тивко да ја усогласи
+     * (анализа во разговорот/DECISIONS.md).
+     */
+    public function postedInvoiceEditBlockReason(PurchaseInvoice $invoice): ?string
+    {
+        if (bccomp($this->bankTransactions->matchedAmountForInvoice('purchase', $invoice->id), '0.00', 2) > 0) {
+            return 'Фактурата има поврзана банкарска трансакција (исплата) — не може да се уредува.';
+        }
+
+        if (bccomp($this->advanceApplications->appliedAmountForInvoice('purchase', $invoice->id), '0.00', 2) > 0) {
+            return 'Фактурата има применет аванс — не може да се уредува.';
+        }
+
+        if ($this->fixedAssetsRepository->existsForPurchaseInvoice($invoice->id)) {
+            return 'Фактурата веќе создаде основно средство (вредноста таму е замрзната) — не може да се уредува.';
+        }
+
+        return null;
+    }
+
+    private function assertEditablePostedInvoice(PurchaseInvoice $invoice): void
+    {
+        $reason = $this->postedInvoiceEditBlockReason($invoice);
+
+        if ($reason !== null) {
+            throw new RuntimeException($reason);
+        }
+    }
+
+    /** @return array{currency: \App\Domain\Accounting\Currency, exchangeRate: string} */
+    private function resolveCurrency(?int $currencyId, string $exchangeRate): array
+    {
         $baseCurrency = $this->currencies->base();
         $currency = $currencyId !== null ? $this->currencies->find($currencyId) : $baseCurrency;
 
@@ -113,8 +341,17 @@ class PurchaseInvoiceService
             $exchangeRate = number_format((float) $exchangeRate, 6, '.', '');
         }
 
-        if ($this->invoices->existsForPartnerAndNumber($partnerId, $supplierNumber)) {
-            throw new InvalidArgumentException("Веќе постои внесена фактура бр. „{$supplierNumber}“ од овој партнер.");
+        return ['currency' => $currency, 'exchangeRate' => $exchangeRate];
+    }
+
+    /**
+     * @param array<int, array{category_id: int, quantity: string|float, unit_price: string|float, vat_rate_id: int, description?: ?string}> $lines
+     * @return array{0: array<int, array<string, mixed>>, 1: float, 2: float} [normalizedLines, totalNet, totalVat]
+     */
+    private function normalizeLines(array $lines, Partner $partner): array
+    {
+        if (count($lines) < 1) {
+            throw new InvalidArgumentException('Фактурата мора да содржи барем 1 ставка.');
         }
 
         $normalized = [];
@@ -183,51 +420,7 @@ class PurchaseInvoiceService
             ];
         }
 
-        $totalNet = round($totalNet, 2);
-        $totalVat = round($totalVat, 2);
-        $totalGross = round($totalNet + $totalVat, 2);
-
-        $this->db->beginTransaction();
-
-        try {
-            $invoice = new PurchaseInvoice(
-                $partnerId,
-                $supplierNumber,
-                $date,
-                $dueDate,
-                'draft',
-                number_format($totalNet, 2, '.', ''),
-                number_format($totalVat, 2, '.', ''),
-                number_format($totalGross, 2, '.', ''),
-                null,
-                null,
-                $currency->id,
-                $exchangeRate
-            );
-
-            $invoiceId = $this->invoices->create($invoice);
-
-            foreach ($normalized as $line) {
-                $this->invoices->insertLine(new PurchaseInvoiceLine(
-                    $line['expense_category_id'],
-                    $line['quantity'],
-                    $line['unit_price'],
-                    $line['account_id'],
-                    $line['vat_rate_id'],
-                    $line['vat_rate'],
-                    $line['line_total'],
-                    $line['description'],
-                    $invoiceId
-                ));
-            }
-
-            $this->db->commit();
-
-            return $invoiceId;
-        } catch (Throwable $e) {
-            $this->db->rollBack();
-            throw $e;
-        }
+        return [$normalized, round($totalNet, 2), round($totalVat, 2)];
     }
 
     /**
@@ -256,6 +449,41 @@ class PurchaseInvoiceService
             throw new RuntimeException('Партнерот на фактурата не постои.');
         }
 
+        [$journalLines, $capitalizableLines] = $this->buildPostingPlan($invoice, $partner);
+
+        $entryId = $this->ledger->postEntry(
+            $invoice->date,
+            "Влезна фактура {$invoice->supplierNumber}",
+            $invoice->supplierNumber,
+            $journalLines
+        );
+
+        $this->invoices->markPosted($invoiceId, $entryId);
+
+        foreach ($capitalizableLines as $capitalizable) {
+            $this->fixedAssets->createFromPurchaseInvoiceLine(
+                $invoiceId,
+                $invoice->supplierNumber,
+                $capitalizable['line'],
+                $capitalizable['category'],
+                $invoice->date,
+                $invoice->exchangeRate
+            );
+        }
+    }
+
+    /**
+     * Групирани дебит редови по сметка (трошок/средство) + дебит по одбивен
+     * ДДВ + 1 кредит ред (обврски кон добавувач, бруто), плус списокот на
+     * капитализабилни линии (за создавање основни средства). Иста логика се
+     * користи и при прво заведување и при прекнижување по уредување на веќе
+     * заведена фактура (updatePurchaseInvoice()) — секогаш гради од
+     * тековните (свежи) линии.
+     *
+     * @return array{0: array<int, array{account_id: int, partner_id?: int, debit: string, credit: string, description: string}>, 1: array<int, array{line: \App\Domain\Invoicing\PurchaseInvoiceLine, category: \App\Domain\Invoicing\ExpenseCategory}>}
+     */
+    private function buildPostingPlan(PurchaseInvoice $invoice, Partner $partner): array
+    {
         $payablesCode = $partner->isForeign() ? self::ACCOUNT_PAYABLES_FOREIGN : self::ACCOUNT_PAYABLES_DOMESTIC;
         $payablesAccount = $this->accounts->findByCode($payablesCode);
 
@@ -346,25 +574,7 @@ class PurchaseInvoiceService
             throw new RuntimeException('Фактурата нема ставки за книжење.');
         }
 
-        $entryId = $this->ledger->postEntry(
-            $invoice->date,
-            "Влезна фактура {$invoice->supplierNumber}",
-            $invoice->supplierNumber,
-            $journalLines
-        );
-
-        $this->invoices->markPosted($invoiceId, $entryId);
-
-        foreach ($capitalizableLines as $capitalizable) {
-            $this->fixedAssets->createFromPurchaseInvoiceLine(
-                $invoiceId,
-                $invoice->supplierNumber,
-                $capitalizable['line'],
-                $capitalizable['category'],
-                $invoice->date,
-                $invoice->exchangeRate
-            );
-        }
+        return [$journalLines, $capitalizableLines];
     }
 
     public function markPaid(int $invoiceId): void

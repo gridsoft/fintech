@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Core\Dates;
 use App\Core\Request;
 use App\Core\Response;
 use App\Repository\CurrencyRepository;
@@ -17,6 +18,8 @@ use Throwable;
 
 class InvoiceController
 {
+    private const DEFAULT_DUE_DAYS = 15;
+
     private InvoiceRepository $invoices;
     private PartnerRepository $partners;
     private ProductRepository $products;
@@ -64,7 +67,7 @@ class InvoiceController
             'old' => [
                 'partner_id' => '',
                 'date' => date('Y-m-d'),
-                'due_date' => date('Y-m-d', strtotime('+30 days')),
+                'due_days' => (string) self::DEFAULT_DUE_DAYS,
                 'currency_id' => (string) $this->currencies->base()->id,
                 'exchange_rate' => '1.000000',
                 'lines' => [
@@ -78,7 +81,7 @@ class InvoiceController
     {
         $partnerId = $request->input('partner_id');
         $date = $request->input('date');
-        $dueDate = $request->input('due_date');
+        $dueDays = $request->input('due_days', (string) self::DEFAULT_DUE_DAYS);
         $currencyId = $request->input('currency_id');
         $exchangeRate = (string) $request->input('exchange_rate', '1.000000');
         $lines = $this->collectLines($request);
@@ -93,12 +96,13 @@ class InvoiceController
             $errors['date'] = 'Датумот е задолжителен.';
         }
 
-        if (!$dueDate) {
-            $errors['due_date'] = 'Рокот на плаќање е задолжителен.';
+        if ($dueDays === '' || $dueDays === null || (int) $dueDays < 0) {
+            $errors['due_days'] = 'Рокот на плаќање (денови) е задолжителен и не може да биде негативен.';
         }
 
         if (!$errors) {
             try {
+                $dueDate = Dates::addDays($date, (int) $dueDays);
                 $invoiceId = $this->service->createInvoice((int) $partnerId, $date, $dueDate, $lines, $currencyId ? (int) $currencyId : null, $exchangeRate);
                 Response::redirect("/invoices/$invoiceId");
                 return;
@@ -119,7 +123,123 @@ class InvoiceController
             'old' => [
                 'partner_id' => $partnerId,
                 'date' => $date,
-                'due_date' => $dueDate,
+                'due_days' => $dueDays,
+                'currency_id' => $currencyId,
+                'exchange_rate' => $exchangeRate,
+                'lines' => $lines ?: [
+                    ['type' => '', 'item_id' => '', 'quantity' => '1', 'unit_price' => '', 'description' => ''],
+                ],
+            ],
+        ]);
+    }
+
+    public function edit(Request $request, string $id): void
+    {
+        $invoice = $this->invoices->find((int) $id);
+
+        if (!$invoice) {
+            Response::html('<h1>404</h1><p>Фактурата не е пронајдена.</p>', 404);
+            return;
+        }
+
+        if (!in_array($invoice->status, ['draft', 'issued'], true)) {
+            Response::html('<h1>Грешка</h1><p>Само нацрт или издадена фактура може да се уредува.</p><p><a href="/invoices/' . (int) $id . '">Назад</a></p>', 422);
+            return;
+        }
+
+        if ($invoice->status === 'issued') {
+            $blockReason = $this->service->issuedInvoiceEditBlockReason($invoice);
+
+            if ($blockReason !== null) {
+                Response::html('<h1>Грешка</h1><p>' . htmlspecialchars($blockReason) . '</p><p><a href="/invoices/' . (int) $id . '">Назад</a></p>', 422);
+                return;
+            }
+        }
+
+        Response::view('invoices/form', [
+            'pageTitle' => "Уреди фактура {$invoice->number}",
+            'activeNav' => 'invoices',
+            'breadcrumb' => ['Почетна' => '/', 'Фактури' => '/invoices', $invoice->number => "/invoices/{$invoice->id}", 'Уреди'],
+            'partners' => $this->partners->all(),
+            'products' => $this->products->allActive(),
+            'services' => $this->services->allActive(),
+            'currencies' => $this->currencies->allActive(),
+            'errors' => [],
+            'formAction' => "/invoices/{$invoice->id}",
+            'submitLabel' => 'Зачувај промени',
+            'cancelUrl' => "/invoices/{$invoice->id}",
+            'repostWarning' => $invoice->status === 'issued',
+            'old' => [
+                'partner_id' => (string) $invoice->partnerId,
+                'date' => $invoice->date,
+                'due_days' => (string) Dates::daysBetween($invoice->date, $invoice->dueDate),
+                'currency_id' => (string) $invoice->currencyId,
+                'exchange_rate' => $invoice->exchangeRate,
+                'lines' => array_map(fn ($line) => [
+                    'type' => $line->productId !== null ? 'product' : 'service',
+                    'item_id' => (string) ($line->productId ?? $line->serviceId),
+                    'quantity' => $line->quantity,
+                    'unit_price' => $line->unitPrice,
+                    'description' => $line->description ?? '',
+                ], $invoice->lines),
+            ],
+        ]);
+    }
+
+    public function update(Request $request, string $id): void
+    {
+        $partnerId = $request->input('partner_id');
+        $date = $request->input('date');
+        $dueDays = $request->input('due_days', (string) self::DEFAULT_DUE_DAYS);
+        $currencyId = $request->input('currency_id');
+        $exchangeRate = (string) $request->input('exchange_rate', '1.000000');
+        $lines = $this->collectLines($request);
+
+        $errors = [];
+
+        if (!$partnerId) {
+            $errors['partner_id'] = 'Изберете партнер.';
+        }
+
+        if (!$date) {
+            $errors['date'] = 'Датумот е задолжителен.';
+        }
+
+        if ($dueDays === '' || $dueDays === null || (int) $dueDays < 0) {
+            $errors['due_days'] = 'Рокот на плаќање (денови) е задолжителен и не може да биде негативен.';
+        }
+
+        if (!$errors) {
+            try {
+                $dueDate = Dates::addDays($date, (int) $dueDays);
+                $this->service->updateInvoice((int) $id, (int) $partnerId, $date, $dueDate, $lines, $currencyId ? (int) $currencyId : null, $exchangeRate);
+                Response::redirect("/invoices/$id");
+                return;
+            } catch (InvalidArgumentException $e) {
+                $errors['lines'] = $e->getMessage();
+            } catch (RuntimeException $e) {
+                Response::html('<h1>Грешка</h1><p>' . htmlspecialchars($e->getMessage()) . '</p><p><a href="/invoices/' . (int) $id . '">Назад</a></p>', 422);
+                return;
+            }
+        }
+
+        Response::view('invoices/form', [
+            'pageTitle' => 'Уреди фактура',
+            'activeNav' => 'invoices',
+            'breadcrumb' => ['Почетна' => '/', 'Фактури' => '/invoices', 'Уреди'],
+            'partners' => $this->partners->all(),
+            'products' => $this->products->allActive(),
+            'services' => $this->services->allActive(),
+            'currencies' => $this->currencies->allActive(),
+            'errors' => $errors,
+            'formAction' => "/invoices/$id",
+            'submitLabel' => 'Зачувај промени',
+            'cancelUrl' => "/invoices/$id",
+            'repostWarning' => ($this->invoices->find((int) $id))->status === 'issued',
+            'old' => [
+                'partner_id' => $partnerId,
+                'date' => $date,
+                'due_days' => $dueDays,
                 'currency_id' => $currencyId,
                 'exchange_rate' => $exchangeRate,
                 'lines' => $lines ?: [

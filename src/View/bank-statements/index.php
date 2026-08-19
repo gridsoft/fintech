@@ -23,7 +23,7 @@
                 <?php foreach ($statements as $statement): ?>
                     <?php $account = $accountsById[$statement->accountId] ?? null; ?>
                     <tr class="cursor-pointer" onclick="location.href='/bank-statements/<?= $statement->id ?>'" style="cursor:pointer;">
-                        <td class="fw-semibold"><?= htmlspecialchars($statement->date) ?></td>
+                        <td class="fw-semibold" data-order="<?= htmlspecialchars($statement->date) ?>"><?= htmlspecialchars(\App\Core\Dates::formatMk($statement->date)) ?></td>
                         <td><?= $account ? htmlspecialchars($account->code . ' — ' . $account->name) : '—' ?></td>
                         <td class="text-muted"><?= htmlspecialchars($statement->reference ?? '') ?></td>
                     </tr>

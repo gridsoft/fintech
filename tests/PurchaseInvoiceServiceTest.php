@@ -225,4 +225,91 @@ class PurchaseInvoiceServiceTest extends TestCase
 
         $this->service->createPurchaseInvoice($this->partnerId, 'SUP-006', '2026-01-01', '2026-01-31', []);
     }
+
+    public function test_it_can_edit_a_draft_invoice_replacing_lines_and_totals_keeping_its_own_number(): void
+    {
+        $invoiceId = $this->service->createPurchaseInvoice($this->partnerId, 'SUP-007', '2026-01-01', '2026-01-31', [
+            ['category_id' => $this->categoryId, 'quantity' => '1', 'unit_price' => '1000.00', 'vat_rate_id' => $this->vatStandardId],
+        ]);
+
+        // Истиот supplier_number (SUP-007) на истата фактура не смее да падне
+        // на "веќе постои" проверката — таа мора да го исклучи себеси.
+        $this->service->updatePurchaseInvoice($invoiceId, $this->partnerId, 'SUP-007', '2026-02-01', '2026-02-28', [
+            ['category_id' => $this->categoryId, 'quantity' => '4', 'unit_price' => '1000.00', 'vat_rate_id' => $this->vatStandardId],
+        ]);
+
+        $invoice = $this->invoices->find($invoiceId);
+
+        $this->assertSame('2026-02-01', $invoice->date);
+        $this->assertCount(1, $invoice->lines);
+        $this->assertSame('4000.00', $invoice->totalNet);
+    }
+
+    public function test_it_refuses_to_edit_a_paid_or_cancelled_invoice(): void
+    {
+        $invoiceId = $this->service->createPurchaseInvoice($this->partnerId, 'SUP-008', '2026-01-01', '2026-01-31', [
+            ['category_id' => $this->categoryId, 'quantity' => '1', 'unit_price' => '1000.00', 'vat_rate_id' => $this->vatStandardId],
+        ]);
+        $this->service->post($invoiceId);
+        $this->service->markPaid($invoiceId);
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessageMatches('/Само нацрт или заведена/');
+
+        $this->service->updatePurchaseInvoice($invoiceId, $this->partnerId, 'SUP-008', '2026-02-01', '2026-02-28', [
+            ['category_id' => $this->categoryId, 'quantity' => '9', 'unit_price' => '1000.00', 'vat_rate_id' => $this->vatStandardId],
+        ]);
+    }
+
+    public function test_it_can_edit_a_posted_invoice_when_nothing_is_matched_yet_and_reposts_the_journal(): void
+    {
+        $invoiceId = $this->service->createPurchaseInvoice($this->partnerId, 'SUP-009', '2026-01-01', '2026-01-31', [
+            ['category_id' => $this->categoryId, 'quantity' => '1', 'unit_price' => '1000.00', 'vat_rate_id' => $this->vatStandardId],
+        ]);
+        $this->service->post($invoiceId);
+        $originalEntryId = $this->invoices->find($invoiceId)->journalEntryId;
+
+        $this->service->updatePurchaseInvoice($invoiceId, $this->partnerId, 'SUP-009', '2026-01-05', '2026-02-04', [
+            ['category_id' => $this->categoryId, 'quantity' => '3', 'unit_price' => '1000.00', 'vat_rate_id' => $this->vatStandardId],
+        ]);
+
+        $invoice = $this->invoices->find($invoiceId);
+
+        $this->assertSame('posted', $invoice->status);
+        $this->assertNotSame($originalEntryId, $invoice->journalEntryId);
+        $this->assertSame('3000.00', $invoice->totalNet);
+        $this->assertSame('3540.00', $invoice->totalGross);
+
+        $stmt = $this->db->prepare('SELECT COALESCE(SUM(debit),0) d, COALESCE(SUM(credit),0) c FROM journal_lines WHERE journal_entry_id = ?');
+        $stmt->execute([$originalEntryId]);
+        $original = $stmt->fetch();
+        $this->assertEquals(1180.00, (float) $original['d']); // старото книжење непроменето (сепак постои, само сторнирано со огледален нов запис)
+
+        $stmt->execute([$invoice->journalEntryId]);
+        $new = $stmt->fetch();
+        $this->assertEquals(3540.00, (float) $new['d']);
+        $this->assertEquals(3540.00, (float) $new['c']);
+    }
+
+    public function test_it_refuses_to_edit_a_posted_invoice_that_already_created_a_fixed_asset(): void
+    {
+        // capitalizableCategoryId нема default_annual_rate — дообработи преку SQL за да мине post().
+        $this->db->prepare('UPDATE expense_categories SET default_annual_rate = 20 WHERE id = ?')->execute([$this->capitalizableCategoryId]);
+
+        $capInvoiceId = $this->service->createPurchaseInvoice($this->partnerId, 'SUP-011', '2026-01-01', '2026-01-31', [
+            ['category_id' => $this->capitalizableCategoryId, 'quantity' => '1', 'unit_price' => '5000.00', 'vat_rate_id' => $this->vatStandardId],
+        ]);
+        $this->service->post($capInvoiceId);
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessageMatches('/основно средство/');
+
+        try {
+            $this->service->updatePurchaseInvoice($capInvoiceId, $this->partnerId, 'SUP-011', '2026-02-01', '2026-02-28', [
+                ['category_id' => $this->capitalizableCategoryId, 'quantity' => '2', 'unit_price' => '5000.00', 'vat_rate_id' => $this->vatStandardId],
+            ]);
+        } finally {
+            $this->db->prepare('DELETE FROM fixed_assets WHERE purchase_invoice_id = ?')->execute([$capInvoiceId]);
+        }
+    }
 }
