@@ -22,6 +22,7 @@ class BankTransaction
     public ?string $description;
     public ?string $code;
     public string $amount;
+    public string $exchangeRate;
     public ?string $balanceAfter;
     public string $direction;
     public ?int $partnerId;
@@ -48,7 +49,8 @@ class BankTransaction
         ?string $invoiceType = null,
         ?int $invoiceId = null,
         ?int $journalEntryId = null,
-        ?int $id = null
+        ?int $id = null,
+        string $exchangeRate = '1.000000'
     ) {
         $this->id = $id;
         $this->bankStatementId = $bankStatementId;
@@ -56,6 +58,7 @@ class BankTransaction
         $this->description = $description;
         $this->code = $code;
         $this->amount = $amount;
+        $this->exchangeRate = $exchangeRate;
         $this->balanceAfter = $balanceAfter;
         $this->direction = $direction;
         $this->partnerId = $partnerId;
@@ -82,7 +85,8 @@ class BankTransaction
             $row['invoice_type'],
             $row['invoice_id'] !== null ? (int) $row['invoice_id'] : null,
             $row['journal_entry_id'] !== null ? (int) $row['journal_entry_id'] : null,
-            (int) $row['id']
+            (int) $row['id'],
+            $row['exchange_rate']
         );
 
         if (isset($row['account_id'])) {
@@ -90,6 +94,12 @@ class BankTransaction
         }
 
         return $transaction;
+    }
+
+    /** MKD-еквивалент на трансакцијата — за денарски трансакции exchangeRate е секогаш 1.000000, без ефект. Огледа Invoice::grossInBaseCurrency(). */
+    public function amountInBaseCurrency(): string
+    {
+        return bcmul($this->amount, $this->exchangeRate, 2);
     }
 
     public function directionLabel(): string

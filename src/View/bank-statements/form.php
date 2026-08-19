@@ -24,6 +24,17 @@
                 <label for="opening_balance" class="form-label">Почетно салдо</label>
                 <input type="number" step="0.01" id="opening_balance" name="opening_balance" class="form-control" value="<?= htmlspecialchars($old['opening_balance'] ?? '0.00') ?>">
             </div>
+            <div class="col-md-3">
+                <label for="currency_id" class="form-label">Валута</label>
+                <select id="currency_id" name="currency_id" class="form-select">
+                    <?php foreach ($currencies as $currency): ?>
+                        <option value="<?= $currency->id ?>" <?= (string) $old['currency_id'] === (string) $currency->id ? 'selected' : '' ?>>
+                            <?= htmlspecialchars($currency->code . ' — ' . $currency->name) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+                <div class="form-text">Девизен извод (EUR/USD/...) — сите трансакции во него се внесуваат во оваа валута, со курс по трансакција.</div>
+            </div>
             <div class="col-md-6">
                 <label for="reference" class="form-label">Референца <span class="text-muted small">(опционално)</span></label>
                 <input type="text" id="reference" name="reference" class="form-control" value="<?= htmlspecialchars($old['reference'] ?? '') ?>">

@@ -47,8 +47,8 @@ class BankTransactionRepository
     public function create(BankTransaction $transaction): int
     {
         $stmt = $this->db->prepare(
-            'INSERT INTO bank_transactions (bank_statement_id, transaction_date, description, code, amount, balance_after, direction, partner_id, gl_account_id)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+            'INSERT INTO bank_transactions (bank_statement_id, transaction_date, description, code, amount, exchange_rate, balance_after, direction, partner_id, gl_account_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
         );
         $stmt->execute([
             $transaction->bankStatementId,
@@ -56,6 +56,7 @@ class BankTransactionRepository
             $transaction->description,
             $transaction->code,
             $transaction->amount,
+            $transaction->exchangeRate,
             $transaction->balanceAfter,
             $transaction->direction,
             $transaction->partnerId,
@@ -84,11 +85,20 @@ class BankTransactionRepository
         return (string) $stmt->fetchColumn();
     }
 
-    /** Збир на веќе матчирани трансакции за фактура — тоа Е преостанатото салдо, нема посебно чувано поле. */
+    /**
+     * Збир на веќе матчирани трансакции за фактура, во MKD — тоа Е
+     * преостанатото салдо, нема посебно чувано поле. `amount * exchange_rate`
+     * го дава MKD-еквивалентот; за денарски трансакции exchange_rate е
+     * секогаш 1.000000, без ефект на резултатот (исто како
+     * BankTransaction::amountInBaseCurrency(), само на SQL ниво за збирот).
+     * CAST(... AS DECIMAL(15,2)) е задолжителен — MySQL го проширува
+     * decimal-скалата на производ/сума (amount 2 + exchange_rate 6 децимали)
+     * и без CAST враќа "700.00000000" наместо "700.00".
+     */
     public function matchedAmountForInvoice(string $invoiceType, int $invoiceId): string
     {
         $stmt = $this->db->prepare(
-            "SELECT COALESCE(SUM(amount), 0) FROM bank_transactions WHERE invoice_type = ? AND invoice_id = ? AND matched_status = 'matched'"
+            "SELECT COALESCE(CAST(SUM(amount * exchange_rate) AS DECIMAL(15,2)), 0) FROM bank_transactions WHERE invoice_type = ? AND invoice_id = ? AND matched_status = 'matched'"
         );
         $stmt->execute([$invoiceType, $invoiceId]);
 

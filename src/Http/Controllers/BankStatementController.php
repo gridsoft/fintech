@@ -56,8 +56,9 @@ class BankStatementController
             'activeNav' => 'bank-statements',
             'breadcrumb' => ['Почетна' => '/', 'Изводи' => '/bank-statements', 'Нов извод'],
             'cashAccounts' => $this->accounts->cashAccounts(),
+            'currencies' => $this->currencies->allActive(),
             'errors' => [],
-            'old' => ['account_id' => '', 'date' => date('Y-m-d'), 'reference' => '', 'opening_balance' => '0.00'],
+            'old' => ['account_id' => '', 'date' => date('Y-m-d'), 'reference' => '', 'opening_balance' => '0.00', 'currency_id' => (string) $this->currencies->base()->id],
         ]);
     }
 
@@ -67,6 +68,7 @@ class BankStatementController
         $date = $request->input('date');
         $reference = trim((string) $request->input('reference'));
         $openingBalance = $request->input('opening_balance', '0.00');
+        $currencyId = $request->input('currency_id', (string) $this->currencies->base()->id);
 
         $errors = [];
 
@@ -79,7 +81,7 @@ class BankStatementController
         }
 
         if (!$errors) {
-            $statementId = $this->service->createStatement((int) $accountId, $date, $reference, (string) $openingBalance);
+            $statementId = $this->service->createStatement((int) $accountId, $date, $reference, (string) $openingBalance, (int) $currencyId);
             Response::redirect("/bank-statements/$statementId");
             return;
         }
@@ -89,8 +91,9 @@ class BankStatementController
             'activeNav' => 'bank-statements',
             'breadcrumb' => ['Почетна' => '/', 'Изводи' => '/bank-statements', 'Нов извод'],
             'cashAccounts' => $this->accounts->cashAccounts(),
+            'currencies' => $this->currencies->allActive(),
             'errors' => $errors,
-            'old' => ['account_id' => $accountId, 'date' => $date, 'reference' => $reference, 'opening_balance' => $openingBalance],
+            'old' => ['account_id' => $accountId, 'date' => $date, 'reference' => $reference, 'opening_balance' => $openingBalance, 'currency_id' => $currencyId],
         ]);
     }
 
@@ -119,6 +122,7 @@ class BankStatementController
             'accountsById' => $this->accountsById(),
             'glAccounts' => $glAccounts,
             'baseCurrencyId' => $this->currencies->base()->id,
+            'statementCurrency' => $this->currencies->find($statement->currencyId),
             'openSalesInvoicesByPartner' => $this->service->openSalesInvoicesByPartner(),
             'openPurchaseInvoicesByPartner' => $this->service->openPurchaseInvoicesByPartner(),
             'matchData' => $this->matchDataForUnmatchedTransactions($statement->transactions),
@@ -152,12 +156,14 @@ class BankStatementController
         $amountsOut = $request->input('amount_out', []);
         $descriptions = $request->input('description', []);
         $fxCloses = $request->input('fx_close', []);
+        $exchangeRates = $request->input('exchange_rate', []);
 
         foreach ($glAccountIds as $i => $glAccountId) {
             $partnerId = $partnerIds[$i] ?? '';
             $invoicePick = (string) ($invoicePicks[$i] ?? '');
             $amountIn = (string) ($amountsIn[$i] ?? '');
             $amountOut = (string) ($amountsOut[$i] ?? '');
+            $exchangeRate = (string) ($exchangeRates[$i] ?? '1.000000');
 
             if ($glAccountId === '' && $partnerId === '' && $invoicePick === '' && $amountIn === '' && $amountOut === '') {
                 continue;
@@ -204,7 +210,8 @@ class BankStatementController
                         (int) $glAccountId,
                         $parts[0],
                         (int) $parts[1],
-                        !empty($fxCloses[$i])
+                        !empty($fxCloses[$i]),
+                        $exchangeRate
                     );
                 } else {
                     $transactionId = $this->service->addTransaction(
@@ -215,7 +222,8 @@ class BankStatementController
                         $amount,
                         $direction,
                         $partnerId !== '' ? (int) $partnerId : null,
-                        (int) $glAccountId
+                        (int) $glAccountId,
+                        $exchangeRate
                     );
                     $this->service->postManual($transactionId);
                 }

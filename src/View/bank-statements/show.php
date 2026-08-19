@@ -1,8 +1,8 @@
 <div class="d-flex justify-content-between align-items-start mb-3">
     <div>
-        <h5 class="mb-1">Извод <?= htmlspecialchars($statement->date) ?></h5>
+        <h5 class="mb-1">Извод <?= htmlspecialchars($statement->date) ?><?php if ($statementCurrency && $statement->currencyId !== $baseCurrencyId): ?> <span class="badge text-bg-info-subtle text-info-emphasis"><?= htmlspecialchars($statementCurrency->code) ?></span><?php endif; ?></h5>
         <div class="text-muted"><?= $account ? htmlspecialchars($account->code . ' — ' . $account->name) : '—' ?></div>
-        <div class="text-muted">Почетно салдо: <?= number_format((float) $statement->openingBalance, 2) ?></div>
+        <div class="text-muted">Почетно салдо: <?= number_format((float) $statement->openingBalance, 2) ?><?= $statementCurrency ? ' ' . htmlspecialchars($statementCurrency->code) : '' ?></div>
         <?php if ($statement->reference): ?><div class="text-muted">Референца: <?= htmlspecialchars($statement->reference) ?></div><?php endif; ?>
     </div>
 </div>
@@ -19,6 +19,10 @@
                     <th>Конто</th>
                     <th>Насока</th>
                     <th class="text-end">Износ</th>
+                    <?php if ($statementCurrency && $statement->currencyId !== $baseCurrencyId): ?>
+                        <th class="text-end">Курс</th>
+                        <th class="text-end">Износ (MKD)</th>
+                    <?php endif; ?>
                     <th class="text-end">Салдо</th>
                     <th>Статус</th>
                     <th>Фактура</th>
@@ -28,7 +32,7 @@
             <tbody>
                 <?php if (empty($statement->transactions)): ?>
                     <tr>
-                        <td colspan="11" class="text-center text-muted py-4">Нема внесени трансакции.</td>
+                        <td colspan="<?= ($statementCurrency && $statement->currencyId !== $baseCurrencyId) ? 13 : 11 ?>" class="text-center text-muted py-4">Нема внесени трансакции.</td>
                     </tr>
                 <?php endif; ?>
                 <?php foreach ($statement->transactions as $transaction): ?>
@@ -48,6 +52,10 @@
                             </span>
                         </td>
                         <td class="text-end"><?= number_format((float) $transaction->amount, 2) ?></td>
+                        <?php if ($statementCurrency && $statement->currencyId !== $baseCurrencyId): ?>
+                            <td class="text-end"><?= number_format((float) $transaction->exchangeRate, 6) ?></td>
+                            <td class="text-end"><?= number_format((float) $transaction->amountInBaseCurrency(), 2) ?></td>
+                        <?php endif; ?>
                         <td class="text-end"><?= $transaction->balanceAfter !== null ? number_format((float) $transaction->balanceAfter, 2) : '—' ?></td>
                         <td>
                             <?php if ($transaction->matchedStatus === 'matched'): ?>
@@ -84,8 +92,9 @@
         <?php if (!empty($errors['lines']) && is_string($errors['lines'])): ?>
             <div class="alert alert-danger"><?= htmlspecialchars($errors['lines']) ?></div>
         <?php endif; ?>
+        <div id="client-validation-alert" class="alert alert-danger d-none">Пополнете ги полињата означени со црвено.</div>
 
-        <form method="post" action="/bank-statements/<?= $statement->id ?>/transactions">
+        <form method="post" action="/bank-statements/<?= $statement->id ?>/transactions" id="transactions-form">
             <div class="table-responsive">
             <table class="table align-middle" id="matched-lines-table">
                 <thead class="table-light">
@@ -99,6 +108,9 @@
                         <th style="min-width: 110px">Одлив</th>
                         <th style="min-width: 110px">Салдо (ново)</th>
                         <th style="min-width: 160px">Забелешка</th>
+                        <?php if ($statementCurrency && $statement->currencyId !== $baseCurrencyId): ?>
+                            <th style="min-width: 100px">Курс (<?= htmlspecialchars($statementCurrency->code) ?>→MKD)</th>
+                        <?php endif; ?>
                         <th style="min-width: 90px">Курс. разлика</th>
                         <th></th>
                     </tr>
@@ -112,6 +124,7 @@
                                     <option value="<?= $partner->id ?>"><?= htmlspecialchars($partner->name) ?></option>
                                 <?php endforeach; ?>
                             </select>
+                            <div class="invalid-feedback">Изберете партнер (задолжително за избраната фактура).</div>
                         </td>
                         <td>
                             <select name="invoice_pick[]" class="form-select matched-invoice">
@@ -125,13 +138,26 @@
                                     <option value="<?= $glAccount->id ?>"><?= htmlspecialchars($glAccount->code . ' — ' . $glAccount->name) ?></option>
                                 <?php endforeach; ?>
                             </select>
+                            <div class="invalid-feedback">Изберете конто.</div>
                         </td>
                         <td><input type="text" class="form-control matched-remaining" readonly tabindex="-1"></td>
                         <td><input type="text" class="form-control matched-invoice-date" readonly tabindex="-1"></td>
-                        <td><input type="number" step="0.01" min="0" name="amount_in[]" class="form-control matched-amount-in"></td>
-                        <td><input type="number" step="0.01" min="0" name="amount_out[]" class="form-control matched-amount-out"></td>
+                        <td>
+                            <input type="number" step="0.01" min="0" name="amount_in[]" class="form-control matched-amount-in">
+                            <div class="invalid-feedback">Точно едно од Прилив/Одлив.</div>
+                        </td>
+                        <td>
+                            <input type="number" step="0.01" min="0" name="amount_out[]" class="form-control matched-amount-out">
+                            <div class="invalid-feedback">Точно едно од Прилив/Одлив.</div>
+                        </td>
                         <td><input type="text" class="form-control matched-balance" readonly tabindex="-1"></td>
                         <td><input type="text" name="description[]" class="form-control"></td>
+                        <?php if ($statementCurrency && $statement->currencyId !== $baseCurrencyId): ?>
+                            <td>
+                                <input type="number" step="0.000001" min="0.000001" name="exchange_rate[]" class="form-control matched-exchange-rate" value="<?= htmlspecialchars($statementCurrency->defaultExchangeRate ?? '1.000000') ?>" required>
+                                <div class="invalid-feedback">Внесете курс поголем од 0.</div>
+                            </td>
+                        <?php endif; ?>
                         <td class="text-center matched-fx-close-cell d-none">
                             <input type="checkbox" class="form-check-input matched-fx-close" title="Затвори ја фактурата и книжи ја разликата како курсна разлика (7750/4750)">
                             <input type="hidden" name="fx_close[]" value="0" class="matched-fx-close-hidden">
@@ -162,6 +188,7 @@
                     <option value="<?= $partner->id ?>"><?= htmlspecialchars($partner->name) ?></option>
                 <?php endforeach; ?>
             </select>
+            <div class="invalid-feedback">Изберете партнер (задолжително за избраната фактура).</div>
         </td>
         <td>
             <select name="invoice_pick[]" class="form-select matched-invoice">
@@ -175,13 +202,26 @@
                     <option value="<?= $glAccount->id ?>"><?= htmlspecialchars($glAccount->code . ' — ' . $glAccount->name) ?></option>
                 <?php endforeach; ?>
             </select>
+            <div class="invalid-feedback">Изберете конто.</div>
         </td>
         <td><input type="text" class="form-control matched-remaining" readonly tabindex="-1"></td>
         <td><input type="text" class="form-control matched-invoice-date" readonly tabindex="-1"></td>
-        <td><input type="number" step="0.01" min="0" name="amount_in[]" class="form-control matched-amount-in"></td>
-        <td><input type="number" step="0.01" min="0" name="amount_out[]" class="form-control matched-amount-out"></td>
+        <td>
+            <input type="number" step="0.01" min="0" name="amount_in[]" class="form-control matched-amount-in">
+            <div class="invalid-feedback">Точно едно од Прилив/Одлив.</div>
+        </td>
+        <td>
+            <input type="number" step="0.01" min="0" name="amount_out[]" class="form-control matched-amount-out">
+            <div class="invalid-feedback">Точно едно од Прилив/Одлив.</div>
+        </td>
         <td><input type="text" class="form-control matched-balance" readonly tabindex="-1"></td>
         <td><input type="text" name="description[]" class="form-control"></td>
+        <?php if ($statementCurrency && $statement->currencyId !== $baseCurrencyId): ?>
+            <td>
+                <input type="number" step="0.000001" min="0.000001" name="exchange_rate[]" class="form-control matched-exchange-rate" value="<?= htmlspecialchars($statementCurrency->defaultExchangeRate ?? '1.000000') ?>" required>
+                <div class="invalid-feedback">Внесете курс поголем од 0.</div>
+            </td>
+        <?php endif; ?>
         <td class="text-center matched-fx-close-cell d-none">
             <input type="checkbox" class="form-check-input matched-fx-close" title="Затвори ја фактурата и книжи ја разликата како курсна разлика (7750/4750)">
             <input type="hidden" name="fx_close[]" value="0" class="matched-fx-close-hidden">
@@ -464,6 +504,94 @@ window.openInvoicesByPartner = <?= json_encode($invoicesByPartnerForJs, JSON_HEX
     document.getElementById('add-matched-line').addEventListener('click', function () {
         var row = template.content.cloneNode(true);
         tbody.appendChild(row);
+    });
+
+    function clearRowInvalid(row) {
+        row.querySelectorAll('.is-invalid').forEach(function (el) {
+            el.classList.remove('is-invalid');
+        });
+    }
+
+    function rowIsEmpty(row) {
+        var konto = row.querySelector('.matched-konto').value;
+        var partner = row.querySelector('.matched-partner').value;
+        var invoicePick = row.querySelector('.matched-invoice').value;
+        var amountIn = row.querySelector('.matched-amount-in').value;
+        var amountOut = row.querySelector('.matched-amount-out').value;
+
+        return konto === '' && partner === '' && invoicePick === '' && amountIn === '' && amountOut === '';
+    }
+
+    // Огледа ја серверската валидација во BankStatementController::addTransactions() —
+    // истите правила, само означени со црвено на самата страница наместо со посебна error-страница.
+    function validateRow(row) {
+        clearRowInvalid(row);
+
+        var konto = row.querySelector('.matched-konto');
+        var partnerSelect = row.querySelector('.matched-partner');
+        var invoiceSelect = row.querySelector('.matched-invoice');
+        var amountIn = row.querySelector('.matched-amount-in');
+        var amountOut = row.querySelector('.matched-amount-out');
+        var exchangeRate = row.querySelector('.matched-exchange-rate');
+        var valid = true;
+
+        if (!konto.value) {
+            konto.classList.add('is-invalid');
+            valid = false;
+        }
+
+        var hasIn = amountIn.value !== '' && parseFloat(amountIn.value) > 0;
+        var hasOut = amountOut.value !== '' && parseFloat(amountOut.value) > 0;
+        if (hasIn === hasOut) {
+            amountIn.classList.add('is-invalid');
+            amountOut.classList.add('is-invalid');
+            valid = false;
+        }
+
+        if (invoiceSelect.value !== '' && !partnerSelect.value) {
+            partnerSelect.classList.add('is-invalid');
+            valid = false;
+        }
+
+        if (exchangeRate && (exchangeRate.value === '' || parseFloat(exchangeRate.value) <= 0)) {
+            exchangeRate.classList.add('is-invalid');
+            valid = false;
+        }
+
+        return valid;
+    }
+
+    var form = document.getElementById('transactions-form');
+    var validationAlert = document.getElementById('client-validation-alert');
+
+    form.addEventListener('submit', function (e) {
+        var firstInvalid = null;
+        var allValid = true;
+
+        tbody.querySelectorAll('.matched-line-row').forEach(function (row) {
+            if (rowIsEmpty(row)) {
+                clearRowInvalid(row);
+                return;
+            }
+
+            if (!validateRow(row)) {
+                allValid = false;
+                if (!firstInvalid) {
+                    firstInvalid = row.querySelector('.is-invalid');
+                }
+            }
+        });
+
+        if (!allValid) {
+            e.preventDefault();
+            validationAlert.classList.remove('d-none');
+            if (firstInvalid) {
+                firstInvalid.focus();
+                firstInvalid.scrollIntoView({ block: 'center', behavior: 'smooth' });
+            }
+        } else {
+            validationAlert.classList.add('d-none');
+        }
     });
 
     recalcBalances();

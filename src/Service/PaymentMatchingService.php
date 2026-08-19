@@ -86,9 +86,13 @@ class PaymentMatchingService
         return bcsub(bcsub($totalGross, $matched, 2), $applied, 2);
     }
 
-    public function createStatement(int $accountId, string $date, ?string $reference, string $openingBalance = '0.00'): int
+    public function createStatement(int $accountId, string $date, ?string $reference, string $openingBalance = '0.00', int $currencyId = 1): int
     {
-        return $this->statements->create(new BankStatement($accountId, $date, $reference ?: null, number_format((float) $openingBalance, 2, '.', '')));
+        if (!$this->currencies->find($currencyId)) {
+            throw new InvalidArgumentException('Изберете важечка валута.');
+        }
+
+        return $this->statements->create(new BankStatement($accountId, $date, $reference ?: null, number_format((float) $openingBalance, 2, '.', ''), null, $currencyId));
     }
 
     /**
@@ -98,9 +102,11 @@ class PaymentMatchingService
      * postManual() по ова за да ја книжи; legacy modal-от исто така работи
      * над ред создаден овде, пред да го матчира со фактура.
      */
-    public function addTransaction(int $statementId, string $date, ?string $description, ?string $code, string $amount, string $direction, ?int $partnerId, int $glAccountId): int
+    public function addTransaction(int $statementId, string $date, ?string $description, ?string $code, string $amount, string $direction, ?int $partnerId, int $glAccountId, string $exchangeRate = '1.000000'): int
     {
-        if (!$this->statements->find($statementId)) {
+        $statement = $this->statements->find($statementId);
+
+        if (!$statement) {
             throw new InvalidArgumentException('Изводот не е пронајден.');
         }
 
@@ -108,7 +114,9 @@ class PaymentMatchingService
             throw new InvalidArgumentException('Изберете важечко конто.');
         }
 
-        return $this->insertTransactionRow($statementId, $date, $description, $code, $amount, $direction, $partnerId, $glAccountId);
+        $exchangeRate = $this->resolveTransactionRate($statement, $exchangeRate);
+
+        return $this->insertTransactionRow($statementId, $date, $description, $code, $amount, $direction, $partnerId, $glAccountId, $exchangeRate);
     }
 
     /**
@@ -133,15 +141,16 @@ class PaymentMatchingService
 
         $label = $transaction->direction === 'in' ? 'Уплата' : 'Исплата';
         $entryLabel = trim($label . ($transaction->description ? " — {$transaction->description}" : ''));
+        $mkdAmount = $transaction->amountInBaseCurrency();
 
         $entryId = $transaction->direction === 'in'
             ? $this->ledger->postEntry($transaction->date, $entryLabel, $transaction->code, [
-                ['account_id' => $transaction->accountId, 'debit' => $transaction->amount, 'credit' => '0', 'description' => $entryLabel],
-                ['account_id' => $transaction->glAccountId, 'partner_id' => $transaction->partnerId, 'debit' => '0', 'credit' => $transaction->amount, 'description' => $entryLabel],
+                ['account_id' => $transaction->accountId, 'debit' => $mkdAmount, 'credit' => '0', 'description' => $entryLabel],
+                ['account_id' => $transaction->glAccountId, 'partner_id' => $transaction->partnerId, 'debit' => '0', 'credit' => $mkdAmount, 'description' => $entryLabel],
             ])
             : $this->ledger->postEntry($transaction->date, $entryLabel, $transaction->code, [
-                ['account_id' => $transaction->glAccountId, 'partner_id' => $transaction->partnerId, 'debit' => $transaction->amount, 'credit' => '0', 'description' => $entryLabel],
-                ['account_id' => $transaction->accountId, 'debit' => '0', 'credit' => $transaction->amount, 'description' => $entryLabel],
+                ['account_id' => $transaction->glAccountId, 'partner_id' => $transaction->partnerId, 'debit' => $mkdAmount, 'credit' => '0', 'description' => $entryLabel],
+                ['account_id' => $transaction->accountId, 'debit' => '0', 'credit' => $mkdAmount, 'description' => $entryLabel],
             ]);
 
         $this->transactions->markMatched($transactionId, null, null, $entryId, $transaction->glAccountId);
@@ -151,9 +160,11 @@ class PaymentMatchingService
      * "Пат Б" — партнер и фактура се веќе избрани (единствен ред од
      * грид-от). Ја инсертира трансакцијата и веднаш ја матчира.
      */
-    public function addMatchedTransaction(int $statementId, string $date, ?string $description, ?string $code, string $amount, string $direction, int $partnerId, int $glAccountId, string $invoiceType, int $invoiceId, bool $closeWithFxDifference = false): int
+    public function addMatchedTransaction(int $statementId, string $date, ?string $description, ?string $code, string $amount, string $direction, int $partnerId, int $glAccountId, string $invoiceType, int $invoiceId, bool $closeWithFxDifference = false, string $exchangeRate = '1.000000'): int
     {
-        if (!$this->statements->find($statementId)) {
+        $statement = $this->statements->find($statementId);
+
+        if (!$statement) {
             throw new InvalidArgumentException('Изводот не е пронајден.');
         }
 
@@ -161,7 +172,8 @@ class PaymentMatchingService
             throw new InvalidArgumentException('Непознат тип фактура.');
         }
 
-        $transactionId = $this->insertTransactionRow($statementId, $date, $description, $code, $amount, $direction, $partnerId, $glAccountId);
+        $exchangeRate = $this->resolveTransactionRate($statement, $exchangeRate);
+        $transactionId = $this->insertTransactionRow($statementId, $date, $description, $code, $amount, $direction, $partnerId, $glAccountId, $exchangeRate);
 
         if ($invoiceType === 'sales') {
             $this->matchToSalesInvoice($transactionId, $invoiceId, $glAccountId, $closeWithFxDifference);
@@ -196,18 +208,19 @@ class PaymentMatchingService
         }
 
         $outstanding = $this->outstandingForSales($invoice->grossInBaseCurrency(), $invoiceId);
-        $fxDifference = $this->resolveFxDifference($invoice->currencyId, $transaction->amount, $outstanding, $closeWithFxDifference);
+        $mkdAmount = $transaction->amountInBaseCurrency();
+        $fxDifference = $this->resolveFxDifference($invoice->currencyId, $mkdAmount, $outstanding, $closeWithFxDifference);
 
-        if ($fxDifference === null && bccomp($transaction->amount, $outstanding, 2) > 0) {
-            throw new InvalidArgumentException("Износот на трансакцијата ({$transaction->amount}) е поголем од преостанатото салдо на фактурата ($outstanding).");
+        if ($fxDifference === null && bccomp($mkdAmount, $outstanding, 2) > 0) {
+            throw new InvalidArgumentException("Износот на трансакцијата ($mkdAmount) е поголем од преостанатото салдо на фактурата ($outstanding).");
         }
 
         // Без FX-затворање, AR-редот е ист износ како уплатата (делумно или целосно плаќање, старото однесување).
         // Со FX-затворање, AR-редот секогаш го затвора целото преостанато салдо — разликата со реално уплатеното оди на курсна разлика.
-        $arAmount = $fxDifference !== null ? $outstanding : $transaction->amount;
+        $arAmount = $fxDifference !== null ? $outstanding : $mkdAmount;
 
         $lines = [
-            ['account_id' => $transaction->accountId, 'debit' => $transaction->amount, 'credit' => '0', 'description' => "Уплата по фактура {$invoice->number}"],
+            ['account_id' => $transaction->accountId, 'debit' => $mkdAmount, 'credit' => '0', 'description' => "Уплата по фактура {$invoice->number}"],
             ['account_id' => $glAccountId, 'partner_id' => $invoice->partnerId, 'debit' => '0', 'credit' => $arAmount, 'description' => "Уплата по фактура {$invoice->number}"],
         ];
 
@@ -219,7 +232,7 @@ class PaymentMatchingService
 
         $this->transactions->markMatched($transaction->id, 'sales', $invoiceId, $entryId, $glAccountId);
 
-        if ($fxDifference !== null || bccomp($transaction->amount, $outstanding, 2) === 0) {
+        if ($fxDifference !== null || bccomp($mkdAmount, $outstanding, 2) === 0) {
             $this->invoices->updateStatus($invoiceId, 'paid');
         }
     }
@@ -240,19 +253,20 @@ class PaymentMatchingService
         }
 
         $outstanding = $this->outstandingForPurchase($invoice->grossInBaseCurrency(), $invoiceId);
+        $mkdAmount = $transaction->amountInBaseCurrency();
         // Обратен предзнак од продажната страна: плаќање ПОВЕЌЕ MKD од книгованата обврска е загуба, ПОМАЛКУ е добивка.
-        $fxDifference = $this->resolveFxDifference($invoice->currencyId, $outstanding, $transaction->amount, $closeWithFxDifference);
+        $fxDifference = $this->resolveFxDifference($invoice->currencyId, $outstanding, $mkdAmount, $closeWithFxDifference);
 
-        if ($fxDifference === null && bccomp($transaction->amount, $outstanding, 2) > 0) {
-            throw new InvalidArgumentException("Износот на трансакцијата ({$transaction->amount}) е поголем од преостанатото салдо на фактурата ($outstanding).");
+        if ($fxDifference === null && bccomp($mkdAmount, $outstanding, 2) > 0) {
+            throw new InvalidArgumentException("Износот на трансакцијата ($mkdAmount) е поголем од преостанатото салдо на фактурата ($outstanding).");
         }
 
         // Исто резонирање како matchToSalesInvoice, огледално: без FX-затворање AP-редот е ист износ како исплатата.
-        $apAmount = $fxDifference !== null ? $outstanding : $transaction->amount;
+        $apAmount = $fxDifference !== null ? $outstanding : $mkdAmount;
 
         $lines = [
             ['account_id' => $glAccountId, 'partner_id' => $invoice->partnerId, 'debit' => $apAmount, 'credit' => '0', 'description' => "Исплата по влезна фактура {$invoice->supplierNumber}"],
-            ['account_id' => $transaction->accountId, 'debit' => '0', 'credit' => $transaction->amount, 'description' => "Исплата по влезна фактура {$invoice->supplierNumber}"],
+            ['account_id' => $transaction->accountId, 'debit' => '0', 'credit' => $mkdAmount, 'description' => "Исплата по влезна фактура {$invoice->supplierNumber}"],
         ];
 
         if ($fxDifference !== null && bccomp($fxDifference, '0.00', 2) !== 0) {
@@ -263,7 +277,7 @@ class PaymentMatchingService
 
         $this->transactions->markMatched($transaction->id, 'purchase', $invoiceId, $entryId, $glAccountId);
 
-        if ($fxDifference !== null || bccomp($transaction->amount, $outstanding, 2) === 0) {
+        if ($fxDifference !== null || bccomp($mkdAmount, $outstanding, 2) === 0) {
             $this->purchaseInvoices->updateStatus($invoiceId, 'paid');
         }
     }
@@ -372,7 +386,8 @@ class PaymentMatchingService
         return $byPartner;
     }
 
-    private function insertTransactionRow(int $statementId, string $date, ?string $description, ?string $code, string $amount, string $direction, ?int $partnerId, int $glAccountId): int
+    /** $exchangeRate веќе резолвиран (resolveTransactionRate()) пред да стигне тука — важечки курс > 0, или фиксно '1.000000' за денарски извод. */
+    private function insertTransactionRow(int $statementId, string $date, ?string $description, ?string $code, string $amount, string $direction, ?int $partnerId, int $glAccountId, string $exchangeRate = '1.000000'): int
     {
         if (!in_array($direction, BankTransaction::DIRECTIONS, true)) {
             throw new InvalidArgumentException('Изберете важечка насока (влез/излез).');
@@ -383,6 +398,7 @@ class PaymentMatchingService
         }
 
         $amount = number_format((float) $amount, 2, '.', '');
+        // Тековното (running) салдо е во валутата на изводот, како на печатениот извод — MKD-конверзија се прави само при книжење, не тука.
         $previousBalance = $this->transactions->lastBalance($statementId);
         $balanceAfter = $direction === 'in' ? bcadd($previousBalance, $amount, 2) : bcsub($previousBalance, $amount, 2);
 
@@ -395,8 +411,32 @@ class PaymentMatchingService
             $code ?: null,
             $partnerId,
             $glAccountId,
-            $balanceAfter
+            $balanceAfter,
+            'unmatched',
+            null,
+            null,
+            null,
+            null,
+            $exchangeRate
         ));
+    }
+
+    /**
+     * Денарски извод (currency_id = 1): курсот е секогаш фиксно '1.000000',
+     * без разлика на внесот — истото правило како InvoiceService::createInvoice()
+     * за денарски фактури. Девизен извод: курсот мора да е внесен и > 0.
+     */
+    private function resolveTransactionRate(BankStatement $statement, string $exchangeRate): string
+    {
+        if ($statement->currencyId === $this->currencies->base()->id) {
+            return '1.000000';
+        }
+
+        if ((float) $exchangeRate <= 0) {
+            throw new InvalidArgumentException('Курсот мора да биде поголем од нула.');
+        }
+
+        return number_format((float) $exchangeRate, 6, '.', '');
     }
 
     private function loadUnmatchedTransaction(int $transactionId, string $expectedDirection, string $expectedDirectionLabel): BankTransaction

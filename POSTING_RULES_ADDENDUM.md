@@ -143,7 +143,143 @@ adjusts the GL AR/AP balance to a new rate without touching the invoice
 itself, always diffing against the *last* revaluation (not the original
 rate) so repeated runs don't double-count.
 
-## 8. Cross-cutting
+## 8. Foreign-currency bank statements (девизни изводи) ✅ Built
+
+**Status: not built.** Confirmed by inspecting the schema — `bank_statements`/
+`bank_transactions` (`012_bank_statements.sql`) have no `currency_id` or
+`exchange_rate` column at all; `amount DECIMAL(15,2)` is always treated as
+MKD. `accounts` has no currency dimension either. A девизна сметка (EUR/USD
+bank account) currently can only be entered by manually pre-converting to MKD
+before typing it in — the actual foreign-currency amount is lost, and there's
+no second source of truth to check the conversion against.
+
+This section designs the extension using the **same pattern already proven
+for invoices** (`019_currencies_and_invoice_fx.sql`: `currency_id INT NOT
+NULL DEFAULT 1` + `exchange_rate DECIMAL(10,6) NOT NULL DEFAULT 1.000000`,
+both FK'd to `currencies`), not a new mechanism.
+
+### 8.1 Rate lives on the transaction, not the statement
+
+A statement (`bank_statements`) can span several calendar days; the NBRM
+reference rate changes daily. Putting `exchange_rate` on the statement would
+force one rate for every line in it, which is wrong the moment a statement
+crosses a day boundary. So:
+
+```
+bank_statements:
+  + currency_id INT NOT NULL DEFAULT 1  -- the account's currency; every
+                                          -- transaction on this statement
+                                          -- must match it (one statement =
+                                          -- one bank account = one currency)
+
+bank_transactions:
+  + exchange_rate DECIMAL(10,6) NOT NULL DEFAULT 1.000000  -- NBRM rate on
+                                                             -- transaction_date,
+                                                             -- entered manually,
+                                                             -- same as invoices
+  -- `amount` stays the transaction's own currency (EUR/USD/...), NOT MKD.
+  -- The MKD equivalent (amount * exchange_rate) is computed at posting time,
+  -- exactly like Invoice::grossInBaseCurrency() does — never stored redundantly.
+```
+
+`currency_id = 1` (base/MKD) keeps every existing денарски statement
+row behaves exactly as today (`exchange_rate` stays `1.000000`, amount ==
+MKD amount) — no migration of existing data, no behavior change for the
+common case.
+
+### 8.2 Chart of accounts: one bank GL account per currency
+
+Do not try to hold multiple currencies in a single GL account. A devizna
+sметка is its own analytic account (mirrors how the client's imported chart
+already splits `1200`/`1201` domestic/foreign receivables, and `100` → `1001`
+жиро сметка analytic in `018_client_509_analytic_accounts.sql`):
+
+```
+100  Парични средства (group)
+1001 ЖИРО СМЕТКА - MKD           (existing)
+1002 ДЕВИЗНА СМЕТКА - EUR        (new, per bank/currency as needed)
+1003 ДЕВИЗНА СМЕТКА - USD        (new, only if a real account exists)
+```
+
+`accounts` itself does **not** need a `currency_id` column for this — the
+statement's `currency_id` already pins the transaction to one account and one
+currency 1:1 (`bank_statements.account_id` + `bank_statements.currency_id`
+together say "this GL account only ever moves in EUR"). Adding a currency
+column to `accounts` would duplicate that and risk the two disagreeing;
+resolving it from the statement, same as today, is simpler and matches
+"don't add abstraction not yet justified."
+
+### 8.3 Posting (`PaymentMatchingService`) — simpler than originally drafted
+
+The GL is always MKD (unchanged invariant). Implementation turned out simpler
+than the foreign-to-foreign comparison originally sketched above: every place
+that used to read `$transaction->amount` (implicitly assumed MKD) now reads
+`$transaction->amountInBaseCurrency()` (`bcmul(amount, exchange_rate, 2)`,
+mirrors `Invoice::grossInBaseCurrency()`) instead — a one-line substitution,
+not a parallel foreign-currency code path:
+
+- **Path A — manual, no invoice** (`postManual`): both journal legs (bank
+  account + the manually-picked GL account) post `amountInBaseCurrency()`
+  instead of the raw `amount`. The transaction row still keeps the original
+  `amount` (EUR) + `exchange_rate` for the audit trail / reconciliation
+  against the printed statement — only the GL posting is converted.
+
+- **Path B — matched to an invoice** (`matchToSalesInvoice`/
+  `matchToPurchaseInvoice`): `$mkdAmount = $transaction->amountInBaseCurrency()`
+  is computed once and substituted everywhere the code used to use
+  `$transaction->amount` — the outstanding comparison, `resolveFxDifference()`,
+  the AR/AP journal line, and the bank leg. Since `resolveFxDifference()`
+  already operated entirely in MKD (comparing against the invoice's
+  `grossInBaseCurrency()`-derived outstanding), converting the transaction to
+  MKD *before* handing it to that existing, already-tested logic reuses it
+  unchanged — no new foreign-to-foreign comparison code needed.
+  **Dropped the "block cross-currency settlement" guard from the original
+  draft**: it's unnecessary. A EUR invoice settled from a USD account (or an
+  MKD account) is not a special case once both sides are in MKD terms — the
+  FX-difference machinery already exists precisely to absorb a mismatch
+  between the booked MKD balance and whatever MKD amount actually arrived,
+  regardless of which currency produced it. Blocking it would have been
+  speculative restriction, not a correctness requirement.
+
+- **Denarski path is untouched by construction.** Any statement with
+  `currency_id = 1` gets `exchange_rate` forced to `1.000000` in
+  `resolveTransactionRate()` — `amountInBaseCurrency()` then always equals
+  `amount`, so every formula above reduces to exactly today's behavior. This
+  is enforced once, at the row-insertion boundary
+  (`PaymentMatchingService::resolveTransactionRate()`), not scattered across
+  branches in each posting method.
+
+- **`BankTransactionRepository::matchedAmountForInvoice()`** sums
+  `amount * exchange_rate` (MySQL) — needed a `CAST(... AS DECIMAL(15,2))`
+  around the `SUM`, since MySQL widens the decimal scale of the product
+  (`amount` 2 places × `exchange_rate` 6 places) and returns e.g.
+  `"700.00000000"` instead of `"700.00"` without it, which broke exact-string
+  assertions in `PaymentMatchingServiceTest` on the existing (denarski) suite
+  until caught and fixed.
+
+- **Running `balance_after` stays in the statement's own currency** (EUR for
+  a devizna izvod), not MKD — it exists to reconcile against the printed/
+  e-statement balance, which is in EUR. MKD conversion happens only at
+  GL-posting time, never touches `insertTransactionRow()`/`lastBalance()`.
+
+Covered by `tests/BankStatementCurrencyTest.php`: manual FX posting, the
+denarski-forced-rate guarantee, a rejected non-positive rate, full/partial
+EUR settlement, and FX-close against a bank rate that differs from the
+invoice's own rate.
+
+### 8.4 Left out of this addendum, flag if actually needed later
+
+- **Period-end revaluation of the bank balance itself.**
+  `FxRevaluationService` today revalues open AR/AP only; an unsettled EUR
+  bank balance sitting at period end also has unrealized FX exposure in
+  principle. This is a real gap but a separate, smaller extension once the
+  statement-side currency exists — don't build it speculatively now.
+- **Live NBRM rate lookup.** Rate stays a manual field per transaction, same
+  as invoices — no external rate-fetching service.
+- **A single bank account holding mixed currencies.** Not a real-world case
+  for a devizna сметка; one account = one currency, enforced by §8.1.
+
+## 9. Cross-cutting
 
 - **Never DELETE a posted journal entry.** Cancelling an invoice after it's posted creates a reversal entry; the original stays for audit trail.
 - **Rounding**: compute VAT per line, sum, round once at the end; keep a rounding account for residual differences if needed.
@@ -161,6 +297,7 @@ Given the core double-entry engine and basic invoicing already exist, extend in 
 5. Add `advance_invoices` and `credit_notes` as their own tables/flows, each with their own posting logic, linked to the original invoice/partner.
 6. ✅ Add `exchange_rate` to invoices + FX gain/loss posting on settlement in the payment-matching step. Also added: period-end unrealized revaluation (`FxRevaluationService`), not originally scoped in this step but built alongside since it shares the same account-mapping (see §7).
 7. Update reporting queries (trial balance, VAT ledger) to respect `vat_rates.type` for correct grouping. Note: `ReportService::vatSummary()` already reads `vat_rates`-linked accounts `260`/`160` generically, so it picked up purchase-side input VAT with no changes needed once step 2 landed.
+8. ✅ Add `currency_id`/`exchange_rate` to `bank_statements`/`bank_transactions` and rework `PaymentMatchingService` per §8 above. Turned out simpler than drafted: convert to MKD once via `BankTransaction::amountInBaseCurrency()` and reuse the existing MKD-only posting/FX logic unchanged, rather than a parallel foreign-to-foreign comparison — no cross-currency settlement block needed either (migration `021_bank_statement_fx.sql`, `tests/BankStatementCurrencyTest.php`).
 
 Also not yet built: `vat_deductible = 'partial'` has no stored split ratio in the schema, so `createPurchaseInvoice()` guards against it the same way as steps 3/4 — add the ratio column and the split logic when a real category needs it.
 
