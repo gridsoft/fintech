@@ -73,6 +73,7 @@ $itemOptions = function ($selectedValue = null) use ($products, $services) {
                     <select id="currency_id" name="currency_id" class="form-select">
                         <?php foreach ($currencies as $currency): ?>
                             <option value="<?= $currency->id ?>" data-is-base="<?= $currency->isBase ? '1' : '0' ?>"
+                                    data-default-rate="<?= htmlspecialchars($currency->defaultExchangeRate ?? '') ?>"
                                     <?= (string) $old['currency_id'] === (string) $currency->id ? 'selected' : '' ?>>
                                 <?= htmlspecialchars($currency->code . ' — ' . $currency->name) ?>
                             </option>
@@ -225,7 +226,27 @@ $itemOptions = function ($selectedValue = null) use ($products, $services) {
         }
     }
 
-    currencySelect.addEventListener('change', syncExchangeRate);
+    // Кога корисникот АКТИВНО менува валута, курсот се предполнува со
+    // стандардниот курс на таа валута (/currencies) — видлив и уредлив,
+    // истиот образец како цената на производ/услуга. Не се случува на
+    // почетно вчитување за да не се избрише вредност веќе внесена од
+    // претходен обид (validation redisplay).
+    function applyDefaultRate() {
+        var opt = currencySelect.options[currencySelect.selectedIndex];
+        var isBase = opt && opt.getAttribute('data-is-base') === '1';
+        if (isBase) {
+            return;
+        }
+        var defaultRate = opt.getAttribute('data-default-rate');
+        if (defaultRate) {
+            exchangeRateInput.value = parseFloat(defaultRate).toFixed(6);
+        }
+    }
+
+    currencySelect.addEventListener('change', function () {
+        syncExchangeRate();
+        applyDefaultRate();
+    });
     syncExchangeRate();
 })();
 </script>

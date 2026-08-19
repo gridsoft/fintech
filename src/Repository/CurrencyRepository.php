@@ -57,12 +57,13 @@ class CurrencyRepository
     public function create(Currency $currency): int
     {
         $stmt = $this->db->prepare(
-            'INSERT INTO currencies (code, name, is_base, is_active) VALUES (?, ?, 0, ?)'
+            'INSERT INTO currencies (code, name, is_base, is_active, default_exchange_rate) VALUES (?, ?, 0, ?, ?)'
         );
         $stmt->execute([
             $currency->code,
             $currency->name,
             $currency->isActive ? 1 : 0,
+            $currency->defaultExchangeRate,
         ]);
 
         return (int) $this->db->lastInsertId();
@@ -71,10 +72,11 @@ class CurrencyRepository
     /** Кодот и is_base намерно не се уредливи по создавање — базната валута е фиксна (migration 019). */
     public function update(Currency $currency): void
     {
-        $stmt = $this->db->prepare('UPDATE currencies SET name = ?, is_active = ? WHERE id = ? AND is_base = 0');
+        $stmt = $this->db->prepare('UPDATE currencies SET name = ?, is_active = ?, default_exchange_rate = ? WHERE id = ? AND is_base = 0');
         $stmt->execute([
             $currency->name,
             $currency->isActive ? 1 : 0,
+            $currency->defaultExchangeRate,
             $currency->id,
         ]);
     }

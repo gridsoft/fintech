@@ -21,6 +21,15 @@
                 <?php if (isset($errors['name'])): ?><div class="invalid-feedback"><?= htmlspecialchars($errors['name']) ?></div><?php endif; ?>
             </div>
 
+            <div class="col-md-6">
+                <label for="default_exchange_rate" class="form-label">Стандарден курс <span class="text-muted small">(опционално)</span></label>
+                <input type="number" step="0.000001" min="0.000001" id="default_exchange_rate" name="default_exchange_rate"
+                       class="form-control <?= isset($errors['default_exchange_rate']) ? 'is-invalid' : '' ?>"
+                       value="<?= htmlspecialchars($currency->defaultExchangeRate ?? '') ?>" placeholder="пр. 61.500000">
+                <?php if (isset($errors['default_exchange_rate'])): ?><div class="invalid-feedback"><?= htmlspecialchars($errors['default_exchange_rate']) ?></div><?php endif; ?>
+                <div class="form-text">Само предполнува курс на фактури/изводи — секогаш видлив и уредлив по документ, никогаш не се книжи автоматски без потврда.</div>
+            </div>
+
             <div class="col-12">
                 <div class="form-check">
                     <input type="checkbox" id="is_active" name="is_active" value="1" class="form-check-input"

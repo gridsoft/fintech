@@ -61,7 +61,9 @@ class CurrencyController
             strtoupper(trim($request->input('code'))),
             trim($request->input('name')),
             false,
-            $request->input('is_active') === '1'
+            $request->input('is_active') === '1',
+            null,
+            $this->resolveDefaultRate($request)
         ));
 
         Response::redirect('/currencies');
@@ -109,6 +111,7 @@ class CurrencyController
 
         $currency->name = trim($request->input('name'));
         $currency->isActive = $request->input('is_active') === '1';
+        $currency->defaultExchangeRate = $this->resolveDefaultRate($request);
 
         $this->currencies->update($currency);
 
@@ -155,6 +158,24 @@ class CurrencyController
             $errors['name'] = 'Називот е задолжителен.';
         }
 
+        $rate = trim((string) $request->input('default_exchange_rate'));
+
+        if ($rate !== '' && (float) $rate <= 0) {
+            $errors['default_exchange_rate'] = 'Курсот мора да биде поголем од нула (или празно, ако нема стандарден).';
+        }
+
         return $errors;
+    }
+
+    /**
+     * Празно поле е валидно (валута без предефиниран курс — секогаш ќе се
+     * бара рачен внес). Само предполнува форми, никогаш не се чита "во
+     * живо" при книжење — види migration 022.
+     */
+    private function resolveDefaultRate(Request $request): ?string
+    {
+        $rate = trim((string) $request->input('default_exchange_rate'));
+
+        return $rate === '' ? null : number_format((float) $rate, 6, '.', '');
     }
 }

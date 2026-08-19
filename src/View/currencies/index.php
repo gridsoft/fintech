@@ -4,7 +4,7 @@
 </a>
 <?php $headerActions = ob_get_clean(); ?>
 
-<p class="text-muted small">MKD е базната валута на системот (главната книга секогаш е во денари) и не се уредува. Странските валути овде се тие во кои смее да се издава/прима фактура — курсот се внесува рачно по документ.</p>
+<p class="text-muted small">MKD е базната валута на системот (главната книга секогаш е во денари) и не се уредува. Странските валути овде се тие во кои смее да се издава/прима фактура — курсот се внесува по документ, со предполнет стандарден курс (ако е поставен) за да не се впишува секој пат рачно.</p>
 
 <div class="card">
     <div class="table-responsive">
@@ -14,6 +14,7 @@
                     <th>Код</th>
                     <th>Назив</th>
                     <th>Тип</th>
+                    <th>Стандарден курс</th>
                     <th>Статус</th>
                     <th class="text-end" data-no-filter>Акции</th>
                 </tr>
@@ -30,6 +31,7 @@
                                 <span class="badge text-bg-light border">странска</span>
                             <?php endif; ?>
                         </td>
+                        <td class="text-muted"><?= $currency->defaultExchangeRate !== null ? number_format((float) $currency->defaultExchangeRate, 6) : '—' ?></td>
                         <td>
                             <?php if ($currency->isActive): ?>
                                 <span class="badge text-bg-success-subtle text-success-emphasis">активна</span>
