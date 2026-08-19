@@ -13,6 +13,16 @@ class Invoice
         'cancelled' => 'Откажана',
     ];
 
+    public const EINVOICE_STATUSES = ['not_sent', 'sent', 'accepted', 'rejected', 'error'];
+
+    public const EINVOICE_STATUS_LABELS = [
+        'not_sent' => 'Не е пратена',
+        'sent' => 'Пратена',
+        'accepted' => 'Прифатена',
+        'rejected' => 'Одбиена',
+        'error' => 'Грешка при праќање',
+    ];
+
     public ?int $id;
     public int $partnerId;
     public string $number;
@@ -25,6 +35,10 @@ class Invoice
     public string $totalVat;
     public string $totalGross;
     public ?int $journalEntryId;
+    public string $einvoiceStatus;
+    public ?string $einvoiceEuid;
+    public ?string $einvoiceError;
+    public ?string $einvoiceSentAt;
 
     /** @var InvoiceLine[] */
     public array $lines = [];
@@ -41,7 +55,11 @@ class Invoice
         ?int $journalEntryId = null,
         ?int $id = null,
         int $currencyId = 1,
-        string $exchangeRate = '1.000000'
+        string $exchangeRate = '1.000000',
+        string $einvoiceStatus = 'not_sent',
+        ?string $einvoiceEuid = null,
+        ?string $einvoiceError = null,
+        ?string $einvoiceSentAt = null
     ) {
         $this->id = $id;
         $this->partnerId = $partnerId;
@@ -55,6 +73,10 @@ class Invoice
         $this->totalVat = $totalVat;
         $this->totalGross = $totalGross;
         $this->journalEntryId = $journalEntryId;
+        $this->einvoiceStatus = $einvoiceStatus;
+        $this->einvoiceEuid = $einvoiceEuid;
+        $this->einvoiceError = $einvoiceError;
+        $this->einvoiceSentAt = $einvoiceSentAt;
     }
 
     public static function fromRow(array $row): self
@@ -71,8 +93,17 @@ class Invoice
             $row['journal_entry_id'] !== null ? (int) $row['journal_entry_id'] : null,
             (int) $row['id'],
             (int) $row['currency_id'],
-            $row['exchange_rate']
+            $row['exchange_rate'],
+            $row['einvoice_status'] ?? 'not_sent',
+            $row['einvoice_euid'] ?? null,
+            $row['einvoice_error'] ?? null,
+            $row['einvoice_sent_at'] ?? null
         );
+    }
+
+    public function einvoiceStatusLabel(): string
+    {
+        return self::EINVOICE_STATUS_LABELS[$this->einvoiceStatus] ?? $this->einvoiceStatus;
     }
 
     public function statusLabel(): string

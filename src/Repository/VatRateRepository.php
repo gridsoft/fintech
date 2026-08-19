@@ -43,7 +43,7 @@ class VatRateRepository
     public function create(VatRate $vatRate): int
     {
         $stmt = $this->db->prepare(
-            'INSERT INTO vat_rates (name, rate, type, payable_account_id, receivable_account_id, is_active) VALUES (?, ?, ?, ?, ?, ?)'
+            'INSERT INTO vat_rates (name, rate, type, payable_account_id, receivable_account_id, is_active, ujp_tax_indicator_code) VALUES (?, ?, ?, ?, ?, ?, ?)'
         );
         $stmt->execute([
             $vatRate->name,
@@ -52,6 +52,7 @@ class VatRateRepository
             $vatRate->payableAccountId,
             $vatRate->receivableAccountId,
             $vatRate->isActive ? 1 : 0,
+            $vatRate->ujpTaxIndicatorCode,
         ]);
 
         return (int) $this->db->lastInsertId();
@@ -60,7 +61,7 @@ class VatRateRepository
     public function update(VatRate $vatRate): void
     {
         $stmt = $this->db->prepare(
-            'UPDATE vat_rates SET name = ?, rate = ?, type = ?, payable_account_id = ?, receivable_account_id = ?, is_active = ? WHERE id = ?'
+            'UPDATE vat_rates SET name = ?, rate = ?, type = ?, payable_account_id = ?, receivable_account_id = ?, is_active = ?, ujp_tax_indicator_code = ? WHERE id = ?'
         );
         $stmt->execute([
             $vatRate->name,
@@ -69,6 +70,7 @@ class VatRateRepository
             $vatRate->payableAccountId,
             $vatRate->receivableAccountId,
             $vatRate->isActive ? 1 : 0,
+            $vatRate->ujpTaxIndicatorCode,
             $vatRate->id,
         ]);
     }

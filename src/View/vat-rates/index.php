@@ -14,6 +14,7 @@
                     <th>Тип</th>
                     <th>Сметка (излезен ДДВ)</th>
                     <th>Сметка (влезен ДДВ)</th>
+                    <th>УЈП код</th>
                     <th>Статус</th>
                     <th class="text-end" data-no-filter>Акции</th>
                 </tr>
@@ -21,7 +22,7 @@
             <tbody>
                 <?php if (empty($vatRates)): ?>
                     <tr>
-                        <td colspan="7" class="text-center text-muted py-4">Нема дефинирани ДДВ стапки.</td>
+                        <td colspan="8" class="text-center text-muted py-4">Нема дефинирани ДДВ стапки.</td>
                     </tr>
                 <?php endif; ?>
                 <?php foreach ($vatRates as $vatRate): ?>
@@ -33,6 +34,13 @@
                         <td><span class="badge text-bg-light border"><?= htmlspecialchars($vatRate->typeLabel()) ?></span></td>
                         <td class="text-muted"><?= $payableAccount ? htmlspecialchars($payableAccount->code . ' — ' . $payableAccount->name) : '—' ?></td>
                         <td class="text-muted"><?= $receivableAccount ? htmlspecialchars($receivableAccount->code . ' — ' . $receivableAccount->name) : '—' ?></td>
+                        <td>
+                            <?php if ($vatRate->ujpTaxIndicatorCode): ?>
+                                <code><?= htmlspecialchars($vatRate->ujpTaxIndicatorCode) ?></code>
+                            <?php else: ?>
+                                <span class="badge text-bg-warning-subtle text-warning-emphasis">немапирано</span>
+                            <?php endif; ?>
+                        </td>
                         <td>
                             <?php if ($vatRate->isActive): ?>
                                 <span class="badge text-bg-success-subtle text-success-emphasis">активна</span>

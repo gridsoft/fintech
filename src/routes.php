@@ -56,6 +56,7 @@ $router->get('/invoices/{id}', [InvoiceController::class, 'show']);
 $router->post('/invoices/{id}/issue', [InvoiceController::class, 'issue']);
 $router->post('/invoices/{id}/mark-paid', [InvoiceController::class, 'markPaid']);
 $router->post('/invoices/{id}/cancel', [InvoiceController::class, 'cancel']);
+$router->post('/invoices/{id}/send-einvoice', [InvoiceController::class, 'sendEinvoice']);
 
 $router->get('/purchase-invoices', [PurchaseInvoiceController::class, 'index']);
 $router->get('/purchase-invoices/create', [PurchaseInvoiceController::class, 'create']);

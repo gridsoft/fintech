@@ -5,6 +5,14 @@ $badgeClass = [
     'paid' => 'text-bg-success-subtle text-success-emphasis',
     'cancelled' => 'text-bg-danger-subtle text-danger-emphasis',
 ][$invoice->status] ?? 'text-bg-light';
+
+$einvoiceBadgeClass = [
+    'not_sent' => 'text-bg-light border',
+    'sent' => 'text-bg-info-subtle text-info-emphasis',
+    'accepted' => 'text-bg-success-subtle text-success-emphasis',
+    'rejected' => 'text-bg-danger-subtle text-danger-emphasis',
+    'error' => 'text-bg-warning-subtle text-warning-emphasis',
+][$invoice->einvoiceStatus] ?? 'text-bg-light';
 ?>
 
 <div class="d-flex justify-content-between align-items-start mb-3 no-print">
@@ -12,6 +20,15 @@ $badgeClass = [
         <span class="badge <?= $badgeClass ?> fs-6"><?= htmlspecialchars($invoice->statusLabel()) ?></span>
         <?php if ($invoice->journalEntryId): ?>
             <a href="/journal/<?= $invoice->journalEntryId ?>" class="ms-2 small">Преглед на книжење →</a>
+        <?php endif; ?>
+        <?php if (in_array($invoice->status, ['issued', 'paid'], true)): ?>
+            <span class="badge <?= $einvoiceBadgeClass ?> ms-2">е-фактура: <?= htmlspecialchars($invoice->einvoiceStatusLabel()) ?></span>
+            <?php if ($invoice->einvoiceEuid): ?>
+                <span class="text-muted small ms-1">euid: <?= htmlspecialchars($invoice->einvoiceEuid) ?></span>
+            <?php endif; ?>
+            <?php if ($invoice->einvoiceStatus === 'error' && $invoice->einvoiceError): ?>
+                <div class="text-danger small mt-1"><?= htmlspecialchars($invoice->einvoiceError) ?></div>
+            <?php endif; ?>
         <?php endif; ?>
     </div>
     <div class="d-flex align-items-start gap-2">
@@ -31,6 +48,12 @@ $badgeClass = [
             <form action="/invoices/<?= $invoice->id ?>/mark-paid" method="post" class="d-inline"
                   onsubmit="return confirm('Да се означи фактурата како платена?');">
                 <button type="submit" class="btn btn-success btn-sm">Означи како платена</button>
+            </form>
+        <?php endif; ?>
+        <?php if (in_array($invoice->status, ['issued', 'paid'], true) && in_array($invoice->einvoiceStatus, ['not_sent', 'error', 'rejected'], true)): ?>
+            <form action="/invoices/<?= $invoice->id ?>/send-einvoice" method="post" class="d-inline"
+                  onsubmit="return confirm('Да се прати фактурата како е-фактура до УЈП? Ова не може да се повлече, само сторно/корекција.');">
+                <button type="submit" class="btn btn-outline-primary btn-sm">Прати како е-фактура</button>
             </form>
         <?php endif; ?>
     </div>

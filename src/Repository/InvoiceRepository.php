@@ -154,4 +154,18 @@ class InvoiceRepository
         $stmt = $this->db->prepare('UPDATE invoices SET status = ?, journal_entry_id = ? WHERE id = ?');
         $stmt->execute(['issued', $journalEntryId, $id]);
     }
+
+    public function recordEinvoiceSent(int $id, string $euid): void
+    {
+        $stmt = $this->db->prepare(
+            "UPDATE invoices SET einvoice_status = 'sent', einvoice_euid = ?, einvoice_error = NULL, einvoice_sent_at = NOW() WHERE id = ?"
+        );
+        $stmt->execute([$euid, $id]);
+    }
+
+    public function recordEinvoiceError(int $id, string $message): void
+    {
+        $stmt = $this->db->prepare("UPDATE invoices SET einvoice_status = 'error', einvoice_error = ? WHERE id = ?");
+        $stmt->execute([$message, $id]);
+    }
 }

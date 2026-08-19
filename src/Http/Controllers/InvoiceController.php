@@ -9,9 +9,11 @@ use App\Repository\InvoiceRepository;
 use App\Repository\PartnerRepository;
 use App\Repository\ProductRepository;
 use App\Repository\ServiceRepository;
+use App\Service\Einvoice\SalesInvoiceEinvoiceService;
 use App\Service\InvoiceService;
 use InvalidArgumentException;
 use RuntimeException;
+use Throwable;
 
 class InvoiceController
 {
@@ -21,6 +23,7 @@ class InvoiceController
     private ServiceRepository $services;
     private CurrencyRepository $currencies;
     private InvoiceService $service;
+    private SalesInvoiceEinvoiceService $einvoiceService;
 
     public function __construct()
     {
@@ -30,6 +33,7 @@ class InvoiceController
         $this->services = new ServiceRepository();
         $this->currencies = new CurrencyRepository();
         $this->service = new InvoiceService($this->invoices);
+        $this->einvoiceService = new SalesInvoiceEinvoiceService($this->invoices, $this->partners, $this->currencies);
     }
 
     public function index(Request $request): void
@@ -180,6 +184,18 @@ class InvoiceController
             $this->service->cancel((int) $id);
         } catch (InvalidArgumentException|RuntimeException $e) {
             Response::html('<h1>Грешка</h1><p>' . htmlspecialchars($e->getMessage()) . '</p><p><a href="/invoices/' . (int) $id . '">Назад</a></p>', 422);
+            return;
+        }
+
+        Response::redirect("/invoices/$id");
+    }
+
+    public function sendEinvoice(Request $request, string $id): void
+    {
+        try {
+            $this->einvoiceService->send((int) $id);
+        } catch (Throwable $e) {
+            Response::html('<h1>Грешка при праќање е-фактура</h1><p>' . htmlspecialchars($e->getMessage()) . '</p><p><a href="/invoices/' . (int) $id . '">Назад</a></p>', 422);
             return;
         }
 

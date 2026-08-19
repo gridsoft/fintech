@@ -55,6 +55,13 @@
                 <div class="form-text">На оваа сметка се книжи одбивниот влезен ДДВ при заведување влезна фактура со оваа стапка.</div>
             </div>
 
+            <div class="col-md-6">
+                <label for="ujp_tax_indicator_code" class="form-label">УЈП даночен индикатор (е-фактура)</label>
+                <input type="text" id="ujp_tax_indicator_code" name="ujp_tax_indicator_code" class="form-control"
+                       value="<?= htmlspecialchars($vatRate->ujpTaxIndicatorCode ?? '') ?>" placeholder="пр. DDV-A">
+                <div class="form-text">Точен код од шифрарникот на УЈП (DDV-A, DDV-B, DDV-V, DDV-G, DDV-9...). Задолжително пред фактура со оваа стапка да се испрати како е-фактура — не се погодува автоматски.</div>
+            </div>
+
             <div class="col-12">
                 <div class="form-check">
                     <input type="checkbox" id="is_active" name="is_active" value="1" class="form-check-input"

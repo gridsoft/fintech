@@ -31,6 +31,7 @@ class VatRate
     public ?int $payableAccountId;
     public ?int $receivableAccountId;
     public bool $isActive;
+    public ?string $ujpTaxIndicatorCode;
 
     public function __construct(
         string $name,
@@ -39,7 +40,8 @@ class VatRate
         ?int $payableAccountId = null,
         ?int $receivableAccountId = null,
         bool $isActive = true,
-        ?int $id = null
+        ?int $id = null,
+        ?string $ujpTaxIndicatorCode = null
     ) {
         $this->id = $id;
         $this->name = $name;
@@ -48,6 +50,7 @@ class VatRate
         $this->payableAccountId = $payableAccountId;
         $this->receivableAccountId = $receivableAccountId;
         $this->isActive = $isActive;
+        $this->ujpTaxIndicatorCode = $ujpTaxIndicatorCode;
     }
 
     public static function fromRow(array $row): self
@@ -59,7 +62,8 @@ class VatRate
             $row['payable_account_id'] !== null ? (int) $row['payable_account_id'] : null,
             $row['receivable_account_id'] !== null ? (int) $row['receivable_account_id'] : null,
             (bool) $row['is_active'],
-            (int) $row['id']
+            (int) $row['id'],
+            $row['ujp_tax_indicator_code'] ?? null
         );
     }
 

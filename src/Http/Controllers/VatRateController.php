@@ -62,6 +62,7 @@ class VatRateController
 
         $payableAccountId = $request->input('payable_account_id');
         $receivableAccountId = $request->input('receivable_account_id');
+        $ujpCode = trim((string) $request->input('ujp_tax_indicator_code'));
 
         $vatRate = new VatRate(
             trim($request->input('name')),
@@ -69,7 +70,9 @@ class VatRateController
             $request->input('type'),
             $payableAccountId !== '' ? (int) $payableAccountId : null,
             $receivableAccountId !== '' ? (int) $receivableAccountId : null,
-            $request->input('is_active') === '1'
+            $request->input('is_active') === '1',
+            null,
+            $ujpCode !== '' ? $ujpCode : null
         );
 
         $this->vatRates->create($vatRate);
@@ -121,6 +124,7 @@ class VatRateController
 
         $payableAccountId = $request->input('payable_account_id');
         $receivableAccountId = $request->input('receivable_account_id');
+        $ujpCode = trim((string) $request->input('ujp_tax_indicator_code'));
 
         $vatRate->name = trim($request->input('name'));
         $vatRate->rate = number_format((float) $request->input('rate'), 2, '.', '');
@@ -128,6 +132,7 @@ class VatRateController
         $vatRate->payableAccountId = $payableAccountId !== '' ? (int) $payableAccountId : null;
         $vatRate->receivableAccountId = $receivableAccountId !== '' ? (int) $receivableAccountId : null;
         $vatRate->isActive = $request->input('is_active') === '1';
+        $vatRate->ujpTaxIndicatorCode = $ujpCode !== '' ? $ujpCode : null;
 
         $this->vatRates->update($vatRate);
 
