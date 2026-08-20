@@ -5,6 +5,98 @@ decision: what was decided, why, and what would make us revisit it. Newest on to
 
 ---
 
+### Payroll: sick/shift/holiday pay as per-period variables, not employee attributes — new "prepare" step before running   (2026-08-20)
+Unlike stažе (a standing employee attribute), sick days, shift days, and
+holiday days worked are different every single period, so they can't live on
+`employees` — they're entered fresh for each payroll run. This forced a real
+workflow change: `/payroll` no longer runs payroll directly from a period
+picker; it now navigates to `/payroll/prepare?period=...` (GET), a review
+screen listing every employee `PayrollService::eligibleEmployeesForPeriod()`
+says is in scope, with three number inputs each. That form POSTs to
+`/payroll/run`, which now accepts an optional `$variableInputsByEmployeeId`
+array threaded into `PayrollService::runPayroll()`. Nothing is persisted at
+the prepare stage — it's a pure review/input form, not a separate ongoing
+attendance-tracking table, matching what was asked for (a step before running,
+not a whole leave-management module).
+User-confirmed rules: sick leave pays 70% of the daily rate (employer-funded,
+no ФЗОМ reimbursement/receivable tracked — that would need real AR
+infrastructure this project doesn't have); shift work is +5%/day; holiday
+work is +50%/day; "daily rate" = period gross (base + seniority) ÷ 21, all
+four figures editable in `payroll_settings` like every other rate, not
+hardcoded. Order of operations: sick/shift/holiday adjust the seniority-
+inclusive gross BEFORE contributions/PIT are computed from it — same "layer
+on top of gross, then compute everything else" pattern as stažе. No new GL
+accounts: still one combined debit to `42100`, since none of these are
+separately tracked liabilities in this client's chart.
+A defensive floor (`gross` can't go below `0.00`) was added after a test
+proved sick-day deductions *can* mathematically exceed gross for extreme
+inputs — and if EVERY eligible employee in a run floors to exactly zero,
+`runPayroll()` now throws a clear `InvalidArgumentException` up front rather
+than letting `LedgerService`'s generic "at least 2 lines" error leak through,
+since an all-zero run has nothing meaningful to post. In practice this can't
+happen through the UI (`PayrollController` caps each day field at 0–31, and
+31 sick days can never exceed gross given the 21-day divisor and 70% pay
+rate) — it only matters if `runPayroll()` is called directly with unchecked
+input, which the test suite does deliberately.
+**Revisit when:** the client actually needs ФЗОМ reimbursement tracked (a
+receivable, not just a wage reduction) — that's a real AR flow this decision
+explicitly deferred, not something the current model can grow into by itself.
+
+### Payroll: seniority ("стаж") supplement uses total career tenure, tracked via a prior-tenure snapshot at hire   (2026-08-20)
+Macedonian labor law (Law on Labor Relations, Art. 106) mandates a minimum
+0.5%-of-base-salary increment per year of *total* work experience — across
+all employers, not just this one — added to gross before contributions/PIT
+are computed. Total career tenure can't be derived from `hire_date` alone,
+so `employees.prior_staz_months` stores the recognized tenure the employee
+already had at the moment they joined (entered once at hiring, entered on
+the form as separate years+months for readability, stored combined).
+`PayrollService::runPayroll()` adds the tenure accrued at this company since
+(computed from `hire_date` via `DateTime::diff()`, floored to completed
+months) to get total months, floors to completed years, and applies the
+rate — itself a new `payroll_settings.seniority_rate_per_year` column (not
+hardcoded) so a higher collectively-bargained rate can be entered, matching
+how every other statutory payroll rate in this table is handled. No new GL
+account: the supplement is just part of what gets debited to `42100` (gross
+expense) — the existing accounts fully cover it. `payslips` keeps
+`base_salary`/`seniority_months`/`seniority_supplement` as separate columns
+even though only their sum (`gross_salary`) drives downstream math, purely
+for payslip transparency/audit — a payslip that only shows a bruto number
+with no breakdown of where the seniority portion came from would be hard to
+reconcile against personnel records later.
+**Revisit when:** the client needs per-employee historical prior-tenure
+corrections after payslips already reference the old value — right now
+`prior_staz_months` is a live field on `employees`, so correcting it changes
+future runs only (already-posted payslips keep their frozen `seniority_months`
+snapshot), which matches how every other frozen-at-posting-time value in
+this project behaves and needs no further work.
+
+### Payroll: full module built now, reusing existing chart accounts; rates stored flat with no effective-dating   (2026-08-20)
+`PLAN.md` had deliberately deferred a full payroll module ("Останато за
+подоцна"), calling a manual `LedgerService::postEntry()` for net pay +
+contributions sufficient and a real module a separate project. The user
+reversed that deferral and asked for a proper module: `employees` master
+data, `payroll_settings` (statutory rates), and a `PayrollService::runPayroll()`
+period run modeled directly on `FixedAssetService::runDepreciation()` — one
+shared balanced journal entry per period, DB-level idempotency via
+`UNIQUE(period_date)` on `payroll_runs`, app-level pre-check for a clean
+no-op on re-run. No new GL accounts were created: the client's imported
+chart (`018_client_509_analytic_accounts.sql`) already has the exact set
+needed — `42100` (gross expense), `2400` (net payable), `23400` (PIT
+payable), `2342`/`2344`/`2346` (pension/health/employment payable) — found
+by reading that migration before assuming new accounts were needed.
+`payroll_settings` (pension/health/employment/PIT rates + personal
+exemption) is a flat single-row table with no effective-dating, mirroring
+`vat_rates`' existing lack of historization — consistent with how this
+project already handles rates that change over time (VAT rate and exchange
+rate are frozen onto each document at posting time, not resolved live), so
+a past `payroll_runs`/`payslips` row is never affected by a later edit to
+`payroll_settings`. These rates are statutory and change periodically —
+the user must keep them current manually; nothing in the app tracks staleness.
+**Revisit when:** the client needs multiple concurrent rate regimes (e.g.
+a mid-month statutory rate change requiring a split run) — that's the point
+where a flat current-value table stops being sufficient and effective-dating
+would need to be added, same trigger as would apply to `vat_rates`.
+
 ### Currency/FX: documents only, no multi-currency bank accounts; reuse existing 7750/4750 accounts   (2026-08-18)
 Foreign-currency support is scoped to sales/purchase invoices only — bank
 statements and accounts stay MKD-only. A foreign invoice's AR/AP is booked in

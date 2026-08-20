@@ -19,6 +19,8 @@ use App\Http\Controllers\FixedAssetController;
 use App\Http\Controllers\AdvanceController;
 use App\Http\Controllers\CurrencyController;
 use App\Http\Controllers\FxRevaluationController;
+use App\Http\Controllers\EmployeeController;
+use App\Http\Controllers\PayrollController;
 
 $router = new Router();
 
@@ -92,6 +94,19 @@ $router->post('/fixed-assets/{id}', [FixedAssetController::class, 'update']);
 
 $router->get('/advances', [AdvanceController::class, 'index']);
 $router->post('/advances/{id}/apply', [AdvanceController::class, 'apply']);
+
+$router->get('/employees', [EmployeeController::class, 'index']);
+$router->get('/employees/create', [EmployeeController::class, 'create']);
+$router->post('/employees', [EmployeeController::class, 'store']);
+$router->get('/employees/{id}/edit', [EmployeeController::class, 'edit']);
+$router->post('/employees/{id}', [EmployeeController::class, 'update']);
+
+$router->get('/payroll', [PayrollController::class, 'index']);
+$router->get('/payroll/settings', [PayrollController::class, 'settings']);
+$router->post('/payroll/settings', [PayrollController::class, 'updateSettings']);
+$router->get('/payroll/prepare', [PayrollController::class, 'prepare']);
+$router->post('/payroll/run', [PayrollController::class, 'runPayroll']);
+$router->get('/payroll/{id}', [PayrollController::class, 'show']);
 
 $router->get('/currencies', [CurrencyController::class, 'index']);
 $router->get('/currencies/create', [CurrencyController::class, 'create']);

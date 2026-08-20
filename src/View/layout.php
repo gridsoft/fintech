@@ -59,6 +59,9 @@
             <a href="/partners" class="sidebar-link <?= ($activeNav ?? '') === 'partners' ? 'active' : '' ?>" title="Партнери">
                 <i class="bi bi-people-fill"></i> <span>Партнери</span>
             </a>
+            <a href="/employees" class="sidebar-link <?= ($activeNav ?? '') === 'employees' ? 'active' : '' ?>" title="Вработени">
+                <i class="bi bi-person-badge"></i> <span>Вработени</span>
+            </a>
 
             <div class="sidebar-heading">Сметководство</div>
             <a href="/journal" class="sidebar-link <?= ($activeNav ?? '') === 'journal' ? 'active' : '' ?>" title="Главна книга">
@@ -69,6 +72,9 @@
             </a>
             <a href="/fixed-assets" class="sidebar-link <?= ($activeNav ?? '') === 'fixed-assets' ? 'active' : '' ?>" title="Основни средства">
                 <i class="bi bi-truck"></i> <span>Основни средства</span>
+            </a>
+            <a href="/payroll" class="sidebar-link <?= ($activeNav ?? '') === 'payroll' ? 'active' : '' ?>" title="Плата">
+                <i class="bi bi-wallet2"></i> <span>Плата</span>
             </a>
             <a href="/fx-revaluations" class="sidebar-link <?= ($activeNav ?? '') === 'fx-revaluations' ? 'active' : '' ?>" title="Курсни разлики">
                 <i class="bi bi-arrow-left-right"></i> <span>Курсни разлики</span>

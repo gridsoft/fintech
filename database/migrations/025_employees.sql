@@ -1,0 +1,10 @@
+CREATE TABLE employees (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    embg VARCHAR(13) UNIQUE,
+    hire_date DATE NOT NULL,
+    termination_date DATE NULL,
+    base_gross_salary DECIMAL(15,2) NOT NULL,
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
